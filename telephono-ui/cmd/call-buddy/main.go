@@ -31,12 +31,53 @@ func printResponse(resp *http.Response) {
 
 //Setting the manager
 func layout(g *gocui.Gui) error {
-	//maxX, maxY := g.Size()
-	if v, err := g.SetView("hello", 0, 0, 20, 15); err != nil {
+	maxX, maxY := g.Size()
+	if v, err := g.SetView("title_view", 0, 0, 27, 2); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		fmt.Fprint(v, "\u001b[31mTerminal "+"\u001b[32mCall "+"\u001b[33mBuddy")
+		fmt.Fprint(v, "\u001b[32mTerminal "+"\u001b[29mCall "+"\u001b[29mBuddy")
+	}
+
+	if v, err := g.SetView("response_body", 28, 0, maxX-1, maxY-4); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		fmt.Fprint(v, "Response Body")
+	}
+
+	//View that houses which operation we are choosing anf the host
+	if v, err := g.SetView("method_body", 0, 3, 27, 13); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		fmt.Fprintln(v, "> https://pornhub.com")
+		fmt.Fprintln(v)
+		fmt.Fprintln(v, "[ ]"+"GET")
+		fmt.Fprintln(v, "[ ]"+"POST")
+		fmt.Fprintln(v, "[ ]"+"HEAD")
+		fmt.Fprintln(v, "[ ]"+"PUT")
+		fmt.Fprintln(v, "[ ]"+"DELETE")
+		fmt.Fprintln(v, "[ ]"+"OPTIONS")
+
+	}
+
+	//view for request headers
+	if v, err := g.SetView("request_head", 0, 14, 27, 19); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		fmt.Fprintln(v, "Request Headers")
+
+	}
+
+	//view for request body
+	if v, err := g.SetView("request_body", 0, 20, 27, maxY-4); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		fmt.Fprintln(v, "Request Body")
+
 	}
 
 	return nil
