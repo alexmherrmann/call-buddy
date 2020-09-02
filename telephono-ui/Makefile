@@ -27,6 +27,5 @@ call-buddy-archs: cmd/call-buddy/*.go
 	ln -sf linux-arm64 build/linux-armv8
 	ln -sf linux-arm64 build/linux-aarch64
 	# Building for MacOS
-	env GOOS=darwin GOARCH=386 go build -o build/darwin-i386/call-buddy $^
 	env GOOS=darwin GOARCH=amd64 go build -o build/darwin-x86_64/call-buddy $^
 	ln -sf darwin-x86_64 build/darwin-amd64
