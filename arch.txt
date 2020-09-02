@@ -1,0 +1,48 @@
+# Contains Operating Systems/Architectures to build. Feel free to add/remove.
+#
+# Note that the following syntax is
+# GOOS GOARCH
+# GOOS GOARCH [ALIAS1]
+# GOOS GOARCH [ALIAS2]
+# ...
+#
+# ^ The plain "GOOS ARCH" is used in the non-symbolic name (i.e. creates a
+#   compiled binary) and the aliases are just symbolic links to the
+#   corresponding non-symbolic name
+#
+# Note: We need the ALIAS because we use the following internally to figure
+#       out the OS and architecture when launching call-buddy to hosts on
+#       UNIXes:
+#
+# $ uname -s -m | tr ' ' '-' | tr '[:upper:]' '[:lower:]'
+#
+# Most uname aliases pulled from, others hand picked:
+# https://en.wikipedia.org/wiki/Uname
+#
+# Go's supported GOOS/GOARCH found at:
+# https://gist.github.com/asukakenji/f15ba7e588ac42795f421b48b8aede63
+#
+linux 386
+linux 386 i386
+linux amd64
+linux amd64 x86_64
+linux arm
+# Go only supports armv5+
+linux arm armv5
+linux arm armv6
+# Raspberry Pi B
+linux arm armv6l
+# Raspberry Pi 2B
+linux arm armhf
+linux arm armv7
+# Raspberry Pi 4
+linux arm armv7l
+linux arm64
+linux arm64 armv8
+darwin amd64
+darwin amd64 x86_64
+freebsd amd64
+freebsd amd64 x86_64
+freebsd 386
+freebsd 386 i386
+# Presumably Windows should be here, but don't have official support yet
