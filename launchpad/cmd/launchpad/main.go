@@ -381,12 +381,15 @@ func remoteRun(target, arch *string, args []string) {
 }
 
 func localRun(args []string) {
-	localCallBuddyPath := "../telephono-ui/call-buddy"
+	callBuddyPath, err := exec.LookPath("call-buddy")
+	if err != nil {
+		log.Fatal("Could not find call-buddy in $PATH!")
+	}
 	// We don't have a full argv here since we are missing arg 0: the executable name
-	argsWithArg0 := append([]string{filepath.Base(localCallBuddyPath)}, args...)
+	argv := append([]string{callBuddyPath}, args...)
 	exe := &exec.Cmd{
-		Path:   localCallBuddyPath,
-		Args:   argsWithArg0,
+		Path:   callBuddyPath,
+		Args:   argv,
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 		Stdin:  os.Stdin,
