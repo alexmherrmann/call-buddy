@@ -366,6 +366,7 @@ func remoteRun(target *targetHost, args []string) {
 		target.arch = remotemeta.arch
 	}
 
+	// FIXME: This is hardcoded...
 	remoteCallBuddyPath := remotemeta.homedir + "/.call-buddy/call-buddy"
 	remoteCallBuddyDir := filepath.Dir(remoteCallBuddyPath)
 	log.Printf("Spawning off remote syncing client on %s\n", target.hostname)
@@ -374,25 +375,30 @@ func remoteRun(target *targetHost, args []string) {
 		// TODO: Inspect the error and don't always fail
 		log.Fatal("Failed to spawn off remote syncing")
 	}
+	defer cleanupRemoteSyncing(syncingClient)
 
 	cwd, _ := os.Getwd()
+	// FIXME: This is also hardcoded...
 	localCallBuddyPath := filepath.Clean(cwd + "/../telephono-ui/build/" + target.arch + "/call-buddy")
 	log.Printf("Syncing call-buddy from %s to remote client at %s@%s:%s\n", localCallBuddyPath, target.username, target.hostname, remoteCallBuddyPath)
 	err = bootstrapCallBuddy(syncingClient.sftpClient, localCallBuddyPath, remoteCallBuddyPath)
-	bootstrapped := err == nil
+	if err != nil {
+		log.Fatalf("Failed to bootstrap self on %s@%s\n", target.username, target.hostname)
+	}
+	defer func() {
+		fmt.Printf("Removing call-buddy from remote client at %s@%s:%s\n", target.username, target.hostname, remoteCallBuddyPath)
+		cleanupBootstrapCallBuddy(syncingClient.sftpClient, remoteCallBuddyPath)
+	}()
 
 	session, err := getPty(client)
 	if err != nil {
 		log.Fatalf("Failed to get pty on %s@%s\n", target.username, target.hostname)
 	}
+	defer session.Close()
 
 	session.Run(remoteCallBuddyPath + " " + strings.Join(args, " "))
 	// FIXME: When we do ctl-c to quit call-buddy we don't get here!
-	fmt.Printf("Removing call-buddy from remote client at %s@%s:%s\n", target.username, target.hostname, remoteCallBuddyPath)
-	if bootstrapped {
-		cleanupBootstrapCallBuddy(syncingClient.sftpClient, remoteCallBuddyPath)
-	}
-	log.Println("Got here!")
+
 	quit <- struct{}{}
 	waitGroup.Wait()
 }
