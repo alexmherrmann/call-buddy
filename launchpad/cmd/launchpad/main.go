@@ -38,20 +38,36 @@ type remoteFileState struct {
 var quit = make(chan struct{})
 var waitGroup = sync.WaitGroup{}
 
-func parseArgs() (target, arch *string, args []string) {
-	arch = flag.String("a", "", "Architecture to use: e.g. linux-amd64, darwin-amd64, linux-arm")
-	target = flag.String("t", "", "Target host: user@host")
+type targetHost struct {
+	username string
+	hostname string
+	arch     string
+}
+
+func parseArgs() (*targetHost, []string) {
+	arch := flag.String("a", "", "Architecture to use: e.g. linux-amd64, darwin-amd64, linux-arm")
+	targetstr := flag.String("t", "", "Target host: user@host")
 	flag.Parse()
 
-	if *target != "" && !strings.Contains(*target, "@") {
+	if *targetstr == "" {
+		return nil, flag.Args()
+	}
+
+	var username *string
+	var hostname *string
+	if !strings.Contains(*targetstr, "@") {
 		user, err := user.Current()
 		if err != nil {
 			log.Fatal("Failed to get username")
 		}
-		username := user.Username
-		*target = username + "@" + *target
+		username = &user.Username
+		hostname = targetstr
+	} else {
+		s := strings.Split(*targetstr, "@")
+		username, hostname = &s[0], &s[1]
 	}
-	return target, arch, flag.Args()
+	target := targetHost{*username, *hostname, *arch}
+	return &target, flag.Args()
 }
 
 func getSSHAgent() ssh.AuthMethod {
@@ -61,23 +77,28 @@ func getSSHAgent() ssh.AuthMethod {
 	return nil
 }
 
-func getClient(username, hostname string) *ssh.Client {
+func getClient(target *targetHost) *ssh.Client {
 	config := &ssh.ClientConfig{
-		User: username,
+		User: target.username,
 		Auth: []ssh.AuthMethod{
 			getSSHAgent(),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
-	client, err := ssh.Dial("tcp", hostname+":22", config)
+	client, err := ssh.Dial("tcp", target.hostname+":22", config)
 	if err != nil {
 		log.Fatal("Failed to dial: ", err)
 	}
 	return client
 }
 
-func remoteMetadata(client *ssh.Client) (string, string) {
+type remoteMetadata struct {
+	arch    string
+	homedir string
+}
+
+func getRemoteMetadata(client *ssh.Client) remoteMetadata {
 	// We need the architecture to copy up the right call-buddy binary
 	archSession, err := client.NewSession()
 	if err != nil {
@@ -101,7 +122,7 @@ func remoteMetadata(client *ssh.Client) (string, string) {
 	homedirSession.Stdout = &out
 	homedirSession.Run("eval echo ~$USER")
 	homedir := strings.TrimSpace(out.String())
-	return arch, homedir
+	return remoteMetadata{arch, homedir}
 }
 
 func getPty(client *ssh.Client) (*ssh.Session, error) {
@@ -330,26 +351,24 @@ func spawnRemoteSyncing(client *ssh.Client, remoteCallBuddyDir string) (*remoteS
 	return &remoteClient, nil
 }
 
-func remoteRun(target, arch *string, args []string) {
-	s := strings.Split(*target, "@")
-	username, hostname := s[0], s[1]
-	client := getClient(username, hostname)
+func remoteRun(target *targetHost, args []string) {
+	client := getClient(target)
 
-	detectedArch, remoteHomeDir := remoteMetadata(client)
-	if *arch != "" {
-		if *arch != detectedArch {
-			log.Printf("Given architecture does not match detected architecture: %s vs %s\n (btw -a can be ommited)", *arch, detectedArch)
+	remotemeta := getRemoteMetadata(client)
+	if target.arch != "" {
+		if target.arch != remotemeta.arch {
+			log.Printf("Given architecture does not match detected architecture: %s vs %s\n (btw -a can be ommited)", target.arch, remotemeta.arch)
 		}
 	} else {
-		if detectedArch == "" {
-			log.Fatalf("Failed to get architecture for %s! Try using the -a flag.", hostname)
+		if remotemeta.arch == "" {
+			log.Fatalf("Failed to get architecture for %s! Try using the -a flag.", target.hostname)
 		}
-		arch = &detectedArch
+		target.arch = remotemeta.arch
 	}
 
-	remoteCallBuddyPath := remoteHomeDir + "/.call-buddy/call-buddy"
+	remoteCallBuddyPath := remotemeta.homedir + "/.call-buddy/call-buddy"
 	remoteCallBuddyDir := filepath.Dir(remoteCallBuddyPath)
-	log.Printf("Spawning off remote syncing client on %s\n", hostname)
+	log.Printf("Spawning off remote syncing client on %s\n", target.hostname)
 	syncingClient, err := spawnRemoteSyncing(client, remoteCallBuddyDir)
 	if err != nil {
 		// TODO: Inspect the error and don't always fail
@@ -357,27 +376,25 @@ func remoteRun(target, arch *string, args []string) {
 	}
 
 	cwd, _ := os.Getwd()
-	localCallBuddyPath := filepath.Clean(cwd + "/../telephono-ui/build/" + *arch + "/call-buddy")
-	log.Printf("Syncing call-buddy from %s to remote client at %s@%s:%s\n", localCallBuddyPath, username, hostname, remoteCallBuddyPath)
+	localCallBuddyPath := filepath.Clean(cwd + "/../telephono-ui/build/" + target.arch + "/call-buddy")
+	log.Printf("Syncing call-buddy from %s to remote client at %s@%s:%s\n", localCallBuddyPath, target.username, target.hostname, remoteCallBuddyPath)
 	err = bootstrapCallBuddy(syncingClient.sftpClient, localCallBuddyPath, remoteCallBuddyPath)
 	bootstrapped := err == nil
 
 	session, err := getPty(client)
 	if err != nil {
-		log.Fatalf("Failed to get pty on %s@%s\n")
+		log.Fatalf("Failed to get pty on %s@%s\n", target.username, target.hostname)
 	}
 
 	session.Run(remoteCallBuddyPath + " " + strings.Join(args, " "))
 	// FIXME: When we do ctl-c to quit call-buddy we don't get here!
-	fmt.Printf("Removing call-buddy from remote client at %s@%s:%s\n", username, hostname, remoteCallBuddyPath)
+	fmt.Printf("Removing call-buddy from remote client at %s@%s:%s\n", target.username, target.hostname, remoteCallBuddyPath)
 	if bootstrapped {
 		cleanupBootstrapCallBuddy(syncingClient.sftpClient, remoteCallBuddyPath)
 	}
 	log.Println("Got here!")
 	quit <- struct{}{}
 	waitGroup.Wait()
-	session.Close()
-	cleanupRemoteSyncing(syncingClient)
 }
 
 func localRun(args []string) {
@@ -397,10 +414,10 @@ func localRun(args []string) {
 }
 
 func main() {
-	target, arch, args := parseArgs()
-	if *target != "" {
-		remoteRun(target, arch, args)
-	} else {
-		localRun(args)
+	target, args := parseArgs()
+	if target != nil {
+		remoteRun(target, args)
+		return
 	}
+	localRun(args)
 }
