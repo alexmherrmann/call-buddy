@@ -5,4 +5,4 @@ telephono/debug
 telephono/telephono
 cmd/call-buddy
 .DS_Store
-*.sw[p-z]
+.*.sw*
