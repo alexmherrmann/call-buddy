@@ -4,7 +4,7 @@ basedir=`dirname "$0"`
 target="$1"
 shift
 cat "$basedir/arch.txt" \
-    | grep -v '#' \
+    | grep -v '^#' \
     | awk 'NF = 2 { printf "env GOOS=%s GOARCH=%s go build -o build/%s-%s/'"$target"' '"$@"'\n", $1, $2, $1, $2 }' \
     | sort | uniq \
     | sh
