@@ -13,6 +13,34 @@ import (
 	"github.com/jroimartin/gocui"
 )
 
+var theEditor TCBEditor
+
+type TCBEditor struct {
+	// This is super dumb that I have to embed this, no way to pass it in...
+	gui               *gocui.Gui
+	expectKeyModifier bool
+}
+
+func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
+	if editor.expectKeyModifier && ch == 'Z' { // Tab for some some some some dumb dumb dumb reason
+		prevSwitchView(editor.gui, v)
+		editor.expectKeyModifier = false
+		return
+	}
+
+	switch {
+	case ch != 0 && mod == 0:
+		v.EditWrite(ch)
+	case key == gocui.KeySpace:
+		v.EditWrite(' ')
+	case key == gocui.KeyBackspace || key == gocui.KeyBackspace2:
+		v.EditDelete(true)
+	case ch == '[' && mod == gocui.ModAlt:
+		editor.expectKeyModifier = true
+	}
+	// FIXME Dylan: Call the parent gocui.Editor.Edit!
+}
+
 var rspBodyStr string = ""
 
 // ViewState Which view is active
@@ -219,7 +247,10 @@ func evalCmdLine(g *gocui.Gui) {
 func switchView(g *gocui.Gui, v *gocui.View) error {
 	// FIXME: Properly handle errors
 	switchViewAttrFunc := func(gui *gocui.Gui, next string) {
-		gui.SetCurrentView(next)
+		currViewPtr, _ := gui.SetCurrentView(next)
+		// FIXME Dylan: This should be done only if the editor is editable
+		//              Also, why are we instantiating this every time we switch?!
+		currViewPtr.Editor = &theEditor
 		g.SetViewOnTop(next)
 		g.Cursor = true
 	}
@@ -254,7 +285,10 @@ func switchView(g *gocui.Gui, v *gocui.View) error {
 func prevSwitchView(g *gocui.Gui, v *gocui.View) error {
 	// FIXME: Properly handle errors
 	switchViewAttrFunc := func(gui *gocui.Gui, next string) {
-		gui.SetCurrentView(next)
+		currViewPtr, _ := gui.SetCurrentView(next)
+		// FIXME Dylan: This should be done only if the editor is editable
+		//              Also, why are we instantiating this every time we switch?!
+		currViewPtr.Editor = &theEditor
 		g.SetViewOnTop(next)
 		g.Cursor = true
 	}
@@ -395,6 +429,7 @@ func main() {
 	}
 	defer g.Close()
 
+	theEditor = TCBEditor{g, false}
 	g.Highlight = true
 	g.Cursor = true
 	g.SelFgColor = gocui.ColorGreen
@@ -412,10 +447,6 @@ func main() {
 	}
 
 	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchView); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.SetKeybinding("", gocui.KeyF1, gocui.ModNone, prevSwitchView); err != nil {
 		log.Panicln(err)
 	}
 
