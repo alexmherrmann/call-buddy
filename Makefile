@@ -1,4 +1,5 @@
 SUBDIRS := telephono telephono-ui launchpad
+export prefix="/usr"
 
 .PHONY: all $(SUBDIRS)
 
@@ -15,3 +16,9 @@ telephono-ui:
 
 launchpad:
 	$(MAKE) -C launchpad all
+
+install:
+	@for d in $(SUBDIRS); do $(MAKE) -C $$d install; done
+
+uninstall:
+	@for d in $(SUBDIRS); do $(MAKE) -C $$d uninstall; done
