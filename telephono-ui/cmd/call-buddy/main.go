@@ -251,6 +251,41 @@ func switchView(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func prevSwitchView(g *gocui.Gui, v *gocui.View) error {
+	// FIXME: Properly handle errors
+	switchViewAttrFunc := func(gui *gocui.Gui, next string) {
+		gui.SetCurrentView(next)
+		g.SetViewOnTop(next)
+		g.Cursor = true
+	}
+	// Round robben switching between views
+	switch currView {
+	case CMD_LINE:
+		// -> method body
+		currView = RSP_BODY
+		switchViewAttrFunc(g, RSP_BODY_VIEW)
+	case MTD_BODY:
+		// -> request headers
+		currView = CMD_LINE
+		switchViewAttrFunc(g, CMD_LINE_VIEW)
+	case RQT_HEAD:
+		// -> request body
+		currView = MTD_BODY
+		switchViewAttrFunc(g, MTD_BODY_VIEW)
+	case RQT_BODY:
+		// -> reqponse body
+		currView = RQT_HEAD
+		switchViewAttrFunc(g, RQT_HEAD_VIEW)
+	case RSP_BODY:
+		// -> command line
+		currView = RQT_BODY
+		switchViewAttrFunc(g, RQT_BODY_VIEW)
+	default:
+		log.Panicf("Got to a unknown view! %d\n", currView)
+	}
+	return nil
+}
+
 //Setting the manager
 func layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
@@ -320,6 +355,7 @@ func layout(g *gocui.Gui) error {
 		v.Wrap = true
 		v.Autoscroll = true
 		v.Editable = true
+
 	}
 
 	// Command Line (e.g. :get http://httpbin.org/get)
@@ -376,6 +412,10 @@ func main() {
 	}
 
 	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchView); err != nil {
+		log.Panicln(err)
+	}
+
+	if err := g.SetKeybinding("", gocui.KeyF1, gocui.ModNone, prevSwitchView); err != nil {
 		log.Panicln(err)
 	}
 
