@@ -9,4 +9,4 @@ launchpad: cmd/launchpad/*.go
 	go build -o $@ $^
 
 install: launchpad
-	cp launchpad $(prefix)/bin/
+	cp launchpad $(realprefix)/bin/
