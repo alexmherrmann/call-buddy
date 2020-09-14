@@ -1,5 +1,6 @@
 SUBDIRS := telephono telephono-ui launchpad
 export prefix="/usr"
+export realprefix=$(abspath $(prefix))
 
 .PHONY: all $(SUBDIRS)
 

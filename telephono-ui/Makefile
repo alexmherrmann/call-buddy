@@ -13,11 +13,11 @@ call-buddy-archs: cmd/call-buddy/*.go
 	../build-arch.sh call-buddy $^
 
 install: call-buddy call-buddy-archs
-	mkdir -p $(prefix)/bin
-	cp call-buddy $(prefix)/bin/
-	mkdir -p $(prefix)/lib/call-buddy/
-	cp -RP build/* $(prefix)/lib/call-buddy
+	mkdir -p $(realprefix)/bin
+	cp call-buddy $(realprefix)/bin/
+	mkdir -p $(realprefix)/lib/call-buddy/
+	cp -RP build/* $(realprefix)/lib/call-buddy
 
 uninstall: all
-	rm $(prefix)/bin/call-buddy
-	rm -r $(prefix)/lib/call-buddy/
+	rm $(realprefix)/bin/call-buddy
+	rm -r $(realprefix)/lib/call-buddy/
