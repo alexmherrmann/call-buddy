@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/jroimartin/gocui"
@@ -249,7 +250,9 @@ func call(args []string) string {
 		r = stderr
 	}
 
-	histList = append(histList, tempHist) //Adding in current call to the history list
+	if len(histList) == 0 || !(reflect.DeepEqual(histList[len(histList)-1], tempHist)) {
+		histList = append(histList, tempHist) //Adding in current call to the history list
+	}
 
 	return r
 }
@@ -382,7 +385,7 @@ func layout(g *gocui.Gui) error {
 		v.Title = "History"
 		v.Wrap = false
 		v.Editable = false
-		v.Autoscroll = false
+		v.Autoscroll = true
 	}
 
 	// Response Body (e.g. html)
