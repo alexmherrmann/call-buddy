@@ -72,6 +72,8 @@ const (
 	RQT_BODY_VIEW = "request_body"
 	// RSP_BODY_VIEW The response body view string
 	RSP_BODY_VIEW = "response_body"
+	// HIST_VIEW The history body view string
+	HIST_VIEW = "history_body"
 )
 
 type ioHijacker struct {
@@ -337,8 +339,20 @@ func layout(g *gocui.Gui) error {
 		fmt.Fprint(v, "\u001b[32mTerminal "+"\u001b[29mCall "+"\u001b[29mBuddy")
 	}
 
+	historyYEnd := titleYStart + 6
+	//History View
+	if v, err := g.SetView(HIST_VIEW, verticalSplitX+1, titleYStart, realMaxX, historyYEnd); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "History"
+		v.Wrap = false
+		v.Editable = false
+		v.Autoscroll = false
+	}
+
 	// Response Body (e.g. html)
-	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, titleYStart, realMaxX, horizontalSplitY); err != nil {
+	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, historyYEnd+1, realMaxX, horizontalSplitY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
