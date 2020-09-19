@@ -15,6 +15,7 @@ import (
 )
 
 var theEditor TCBEditor
+var historyRowSelected int
 
 type TCBEditor struct {
 	// This is super dumb that I have to embed this, no way to pass it in...
@@ -24,6 +25,7 @@ type TCBEditor struct {
 
 //What will comprise each history entry
 type historyEntry struct {
+	method     string
 	url        string
 	requestMap map[string]string
 }
@@ -35,6 +37,7 @@ var histList []historyEntry //List for history view
 func formatHistList() string {
 	var res string
 	for _, entry := range histList {
+		res += entry.method + " "
 		res += entry.url
 		res += " {"
 		for key, value := range entry.requestMap {
@@ -48,7 +51,7 @@ func formatHistList() string {
 
 func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
 	if editor.expectKeyModifier && ch == 'Z' { // Tab for some some some some dumb dumb dumb reason
-		prevSwitchView(editor.gui, v)
+		switchPrevView(editor.gui, v)
 		editor.expectKeyModifier = false
 		return
 	}
@@ -80,6 +83,8 @@ const (
 	RQT_HEAD
 	// RQT_BODY The request body view is active
 	RQT_BODY
+	// HIST_BODY The history body is active
+	HIST_BODY
 	// RSP_BODY The response body view is active
 	RSP_BODY
 	// NO_STATE No state is selected
@@ -107,7 +112,7 @@ type ioHijacker struct {
 	channel    chan string
 }
 
-var currView ViewState = NO_STATE
+var currView ViewState = NO_STATE //needs a better name
 
 func die(msg string) {
 	os.Stderr.WriteString(msg)
@@ -173,16 +178,16 @@ func call(args []string) string {
 		return "Usage: <call-type> <url> [content-type]"
 	}
 
-	callType := strings.ToLower(args[0])
+	methodType := strings.ToLower(args[0])
 	url := args[1]
 	contentType := "text/plain"
 	if argLen > 2 {
 		contentType = args[2]
 	}
 
-	tempHist := historyEntry{url, make(map[string]string)}
+	tempHist := historyEntry{methodType, url, make(map[string]string)}
 
-	switch callType {
+	switch methodType {
 	case "get":
 		resp, err := http.Get(url)
 		if err != nil {
@@ -266,7 +271,7 @@ func evalCmdLine(g *gocui.Gui) {
 	commandStr = strings.TrimSpace(commandStr)
 	args := strings.Split(commandStr, " ")
 
-	if strings.HasPrefix(commandStr, ">") {
+	if strings.HasPrefix(commandStr, ">") { //Saving resp bodies
 		if len(args) < 2 {
 			return
 		}
@@ -274,6 +279,9 @@ func evalCmdLine(g *gocui.Gui) {
 		fd, _ := os.Create(outfile)
 		defer fd.Close()
 		fd.WriteString(rspBodyView.ViewBuffer())
+	} else if commandStr == "history" {
+		currView = HIST_BODY
+		switchViewAttr(g, HIST_VIEW)
 	} else {
 		rspBodyView.Clear()
 		responseStr := call(args)
@@ -283,76 +291,70 @@ func evalCmdLine(g *gocui.Gui) {
 	}
 }
 
-func switchView(g *gocui.Gui, v *gocui.View) error {
+func switchViewAttr(gui *gocui.Gui, next string) {
+	currViewPtr, _ := gui.SetCurrentView(next)
+	// FIXME Dylan: This should be done only if the editor is editable
+	//              Also, why are we instantiating this every time we switch?!
+	currViewPtr.Editor = &theEditor
+	gui.SetViewOnTop(next)
+	gui.Cursor = true
+}
+
+func switchNextView(g *gocui.Gui, v *gocui.View) error {
 	// FIXME: Properly handle errors
-	switchViewAttrFunc := func(gui *gocui.Gui, next string) {
-		currViewPtr, _ := gui.SetCurrentView(next)
-		// FIXME Dylan: This should be done only if the editor is editable
-		//              Also, why are we instantiating this every time we switch?!
-		currViewPtr.Editor = &theEditor
-		g.SetViewOnTop(next)
-		g.Cursor = true
-	}
 	// Round robben switching between views
 	switch currView {
 	case CMD_LINE:
 		// -> method body
 		currView = MTD_BODY
-		switchViewAttrFunc(g, MTD_BODY_VIEW)
+		switchViewAttr(g, MTD_BODY_VIEW)
 	case MTD_BODY:
 		// -> request headers
 		currView = RQT_HEAD
-		switchViewAttrFunc(g, RQT_HEAD_VIEW)
+		switchViewAttr(g, RQT_HEAD_VIEW)
 	case RQT_HEAD:
 		// -> request body
 		currView = RQT_BODY
-		switchViewAttrFunc(g, RQT_BODY_VIEW)
+		switchViewAttr(g, RQT_BODY_VIEW)
 	case RQT_BODY:
 		// -> reqponse body
 		currView = RSP_BODY
-		switchViewAttrFunc(g, RSP_BODY_VIEW)
+		switchViewAttr(g, RSP_BODY_VIEW)
 	case RSP_BODY:
 		// -> command line
 		currView = CMD_LINE
-		switchViewAttrFunc(g, CMD_LINE_VIEW)
+		switchViewAttr(g, CMD_LINE_VIEW)
 	default:
 		log.Panicf("Got to a unknown view! %d\n", currView)
 	}
 	return nil
 }
 
-func prevSwitchView(g *gocui.Gui, v *gocui.View) error {
+func switchPrevView(g *gocui.Gui, v *gocui.View) error {
 	// FIXME: Properly handle errors
-	switchViewAttrFunc := func(gui *gocui.Gui, next string) {
-		currViewPtr, _ := gui.SetCurrentView(next)
-		// FIXME Dylan: This should be done only if the editor is editable
-		//              Also, why are we instantiating this every time we switch?!
-		currViewPtr.Editor = &theEditor
-		g.SetViewOnTop(next)
-		g.Cursor = true
-	}
+
 	// Round robben switching between views
 	switch currView {
 	case CMD_LINE:
 		// -> method body
 		currView = RSP_BODY
-		switchViewAttrFunc(g, RSP_BODY_VIEW)
+		switchViewAttr(g, RSP_BODY_VIEW)
 	case MTD_BODY:
 		// -> request headers
 		currView = CMD_LINE
-		switchViewAttrFunc(g, CMD_LINE_VIEW)
+		switchViewAttr(g, CMD_LINE_VIEW)
 	case RQT_HEAD:
 		// -> request body
 		currView = MTD_BODY
-		switchViewAttrFunc(g, MTD_BODY_VIEW)
+		switchViewAttr(g, MTD_BODY_VIEW)
 	case RQT_BODY:
 		// -> reqponse body
 		currView = RQT_HEAD
-		switchViewAttrFunc(g, RQT_HEAD_VIEW)
+		switchViewAttr(g, RQT_HEAD_VIEW)
 	case RSP_BODY:
 		// -> command line
 		currView = RQT_BODY
-		switchViewAttrFunc(g, RQT_BODY_VIEW)
+		switchViewAttr(g, RQT_BODY_VIEW)
 	default:
 		log.Panicf("Got to a unknown view! %d\n", currView)
 	}
@@ -407,7 +409,7 @@ func layout(g *gocui.Gui) error {
 			return err
 		}
 		v.Title = "Method Body"
-		fmt.Fprintln(v, "> https://google.com")
+		fmt.Fprintln(v, "FIX ME PLEASE")
 		fmt.Fprintln(v)
 		fmt.Fprintln(v, "[ ]"+"GET")
 		fmt.Fprintln(v, "[ ]"+"POST")
@@ -465,6 +467,15 @@ func onEnter(g *gocui.Gui, v *gocui.View) error {
 	// FIXME: Deal with other views
 	if currView == CMD_LINE {
 		evalCmdLine(g)
+	} else if currView == HIST_BODY {
+		curLine := histList[historyRowSelected]
+		cmdView, _ := g.View(CMD_LINE_VIEW)
+		cmdView.Clear()
+		selectedLine := curLine.method + " " + curLine.url + " " + curLine.requestMap["Content-type"]
+		fmt.Fprint(cmdView, selectedLine)
+		cmdView.SetCursor(len(selectedLine)-1, 0)
+		currView = CMD_LINE
+		switchViewAttr(g, CMD_LINE_VIEW)
 	}
 	return nil
 }
@@ -497,7 +508,14 @@ func main() {
 		log.Panicln(err)
 	}
 
-	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchView); err != nil {
+	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchNextView); err != nil {
+		log.Panicln(err)
+	}
+
+	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyArrowDown, gocui.ModNone, histArrowDown); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyArrowUp, gocui.ModNone, histArrowUp); err != nil {
 		log.Panicln(err)
 	}
 
@@ -507,4 +525,21 @@ func main() {
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 		log.Panicln(err)
 	}
+}
+
+func histArrowUp(gui *gocui.Gui, view *gocui.View) error {
+	curX, curY := view.Cursor()
+	if curY > 0 {
+		curY -= 1
+		historyRowSelected--
+	}
+	view.SetCursor(curX, curY)
+	return nil
+}
+
+func histArrowDown(gui *gocui.Gui, view *gocui.View) error {
+	curX, curY := view.Cursor()
+	view.SetCursor(curX, curY+1)
+	historyRowSelected++
+	return nil
 }
