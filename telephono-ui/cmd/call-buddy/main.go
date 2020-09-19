@@ -21,6 +21,30 @@ type TCBEditor struct {
 	expectKeyModifier bool
 }
 
+//What will comprise each history entry
+type historyEntry struct {
+	url        string
+	requestMap map[string]string
+}
+
+var histList []historyEntry //List for history view
+
+// url {Header: content-type, , ,} \n
+
+func formatHistList() string {
+	var res string
+	for _, entry := range histList {
+		res += entry.url
+		res += " {"
+		for key, value := range entry.requestMap {
+			res += key + ": " + value + ", "
+		}
+		res = strings.TrimSuffix(res, ", ")
+		res += "}\n"
+	}
+	return res
+}
+
 func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
 	if editor.expectKeyModifier && ch == 'Z' { // Tab for some some some some dumb dumb dumb reason
 		prevSwitchView(editor.gui, v)
@@ -154,6 +178,9 @@ func call(args []string) string {
 	if argLen > 2 {
 		contentType = args[2]
 	}
+
+	tempHist := historyEntry{url, make(map[string]string)}
+
 	switch callType {
 	case "get":
 		resp, err := http.Get(url)
@@ -170,6 +197,7 @@ func call(args []string) string {
 			log.Print(err)
 			break
 		}
+		tempHist.requestMap["Content-type"] = contentType
 		defer resp.Body.Close()
 		r = responseToString(resp)
 
@@ -204,6 +232,7 @@ func call(args []string) string {
 		}
 		req.Header.Add("Connection", "close")
 		req.Header.Add("Content-type", contentType)
+		tempHist.requestMap["Content-type"] = contentType
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			log.Print(err)
@@ -220,6 +249,8 @@ func call(args []string) string {
 		r = stderr
 	}
 
+	histList = append(histList, tempHist) //Adding in current call to the history list
+
 	return r
 }
 
@@ -227,6 +258,7 @@ func evalCmdLine(g *gocui.Gui) {
 	// FIXME: Deal with errors!
 	cmdLineView, _ := g.View(CMD_LINE_VIEW)
 	rspBodyView, _ := g.View(RSP_BODY_VIEW)
+	histView, _ := g.View(HIST_VIEW)
 	commandStr := cmdLineView.ViewBuffer()
 	commandStr = strings.TrimSpace(commandStr)
 	args := strings.Split(commandStr, " ")
@@ -243,6 +275,8 @@ func evalCmdLine(g *gocui.Gui) {
 		rspBodyView.Clear()
 		responseStr := call(args)
 		fmt.Fprint(rspBodyView, responseStr)
+		histView.Clear()
+		fmt.Fprint(histView, formatHistList())
 	}
 }
 
