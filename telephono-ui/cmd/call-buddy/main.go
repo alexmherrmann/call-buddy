@@ -8,11 +8,30 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"reflect"
 	"strings"
 
+	t "github.com/call-buddy/call-buddy/telephono"
 	"github.com/jroimartin/gocui"
 )
+
+var globalTelephonoState t.CallBuddyState
+
+func init() {
+	globalTelephonoState = t.InitNewState()
+	globalTelephonoState.Collections = append(globalTelephonoState.Collections, t.CallBuddyCollection{
+		Name: "The fake one FIXME up boys",
+		RequestTemplates: []t.RequestTemplate{
+			{
+				Method: t.Get, Url: t.NewExpandable("https://{vars.Host}"),
+				Headers:        t.NewHeadersTemplate(),
+				ExpandableBody: t.NewExpandable("Hello World")}},
+	})
+}
+
+func getCurrentRequestTemplate(state *t.CallBuddyState) t.RequestTemplate {
+	// DEMO AH: Obviously this is NOT ok
+	return globalTelephonoState.Collections[0].RequestTemplates[0]
+}
 
 var theEditor TCBEditor
 var historyRowSelected int
@@ -35,18 +54,7 @@ var histList []historyEntry //List for history view
 // url {Header: content-type, , ,} \n
 
 func formatHistList() string {
-	var res string
-	for _, entry := range histList {
-		res += entry.method + " "
-		res += entry.url
-		res += " {"
-		for key, value := range entry.requestMap {
-			res += key + ": " + value + ", "
-		}
-		res = strings.TrimSuffix(res, ", ")
-		res += "}\n"
-	}
-	return res
+	return globalTelephonoState.History.GetSimpleWholeHistoryReport()
 }
 
 func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
@@ -152,6 +160,7 @@ func unhijackStderr(hijacker *ioHijacker) string {
 	return <-hijacker.channel
 }
 
+// responseToString Creates a "report" of the response
 func responseToString(resp *http.Response) string {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -168,7 +177,10 @@ func responseToString(resp *http.Response) string {
 }
 
 func call(args []string) string {
-	var r string
+	var responseBody string
+	var response *http.Response
+
+	var err error
 	// If we run into any issues here, rather than dying we can catch them with
 	// the hijacker and print them out to the tui!
 	hijack := hijackStderr()
@@ -189,32 +201,29 @@ func call(args []string) string {
 
 	switch methodType {
 	case "get":
-		resp, err := http.Get(url)
-		if err != nil {
+		if response, err = http.Get(url); err != nil {
 			log.Print(err)
 			break
 		}
-		defer resp.Body.Close()
-		r = responseToString(resp)
+		defer response.Body.Close()
+		responseBody = responseToString(response)
 
 	case "post":
-		resp, err := http.Post(url, contentType, os.Stdin)
-		if err != nil {
+		if response, err = http.Get(url); err != nil {
 			log.Print(err)
 			break
 		}
 		tempHist.requestMap["Content-type"] = contentType
-		defer resp.Body.Close()
-		r = responseToString(resp)
+		defer response.Body.Close()
+		responseBody = responseToString(response)
 
 	case "head":
-		resp, err := http.Head(url)
-		if err != nil {
+		if response, err = http.Get(url); err != nil {
 			log.Print(err)
 			break
 		}
-		defer resp.Body.Close()
-		r = responseToString(resp)
+		defer response.Body.Close()
+		responseBody = responseToString(response)
 
 	case "delete":
 		req, err := http.NewRequest("DELETE", url, nil)
@@ -223,13 +232,12 @@ func call(args []string) string {
 			break
 		}
 		req.Header.Add("Connection", "close")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
+		if response, err = http.Get(url); err != nil {
 			log.Print(err)
 			break
 		}
-		defer resp.Body.Close()
-		r = responseToString(resp)
+		defer response.Body.Close()
+		responseBody = responseToString(response)
 
 	case "put":
 		req, err := http.NewRequest("PUT", url, os.Stdin)
@@ -239,27 +247,31 @@ func call(args []string) string {
 		req.Header.Add("Connection", "close")
 		req.Header.Add("Content-type", contentType)
 		tempHist.requestMap["Content-type"] = contentType
-		resp, err := http.DefaultClient.Do(req)
+		response, err := http.DefaultClient.Do(req)
 		if err != nil {
 			log.Print(err)
 			break
 		}
-		defer resp.Body.Close()
-		r = responseToString(resp)
+		defer response.Body.Close()
+		responseBody = responseToString(response)
 
 	default:
-		r = "Invalid <call-type> given.\n"
+		responseBody = "Invalid <call-type> given.\n"
 	}
 	stderr := unhijackStderr(hijack)
 	if stderr != "" {
-		r = stderr
+		responseBody = stderr
 	}
 
-	if len(histList) == 0 || !(reflect.DeepEqual(histList[len(histList)-1], tempHist)) {
-		histList = append(histList, tempHist) //Adding in current call to the history list
+	if response != nil {
+		globalTelephonoState.History.AddFinishedCall(response)
 	}
 
-	return r
+	//if len(histList) == 0 || !(reflect.DeepEqual(histList[len(histList)-1], tempHist)) {
+	//	histList = append(histList, tempHist) //Adding in current call to the history list
+	//}
+
+	return responseBody
 }
 
 func evalCmdLine(g *gocui.Gui) {
