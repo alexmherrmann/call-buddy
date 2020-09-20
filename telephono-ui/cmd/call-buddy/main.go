@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -167,18 +168,14 @@ func responseToString(resp *http.Response) string {
 	return rspBodyStr
 }
 
-func call(args []string) string {
-	var responseBody string
-	var response *http.Response
-
-	var err error
+func call(args []string) (response *http.Response, err error) {
 	// If we run into any issues here, rather than dying we can catch them with
 	// the hijacker and print them out to the tui!
 	hijack := hijackStderr()
 
 	argLen := len(args)
 	if argLen < 2 {
-		return "Usage: <call-type> <url> [content-type]"
+		return nil, errors.New("Invalid Usage: <call-type> <url> [content-type]")
 	}
 
 	methodType := strings.ToLower(args[0])
@@ -191,41 +188,28 @@ func call(args []string) string {
 	switch methodType {
 	case "get":
 		if response, err = http.Get(url); err != nil {
-			log.Print(err)
-			break
+			return nil, err
 		}
-		defer response.Body.Close()
-		responseBody = responseToString(response)
 
 	case "post":
 		if response, err = http.Get(url); err != nil {
-			log.Print(err)
-			break
+			return nil, err
 		}
-		defer response.Body.Close()
-		responseBody = responseToString(response)
 
 	case "head":
 		if response, err = http.Get(url); err != nil {
-			log.Print(err)
-			break
+			return nil, err
 		}
-		defer response.Body.Close()
-		responseBody = responseToString(response)
 
 	case "delete":
 		req, err := http.NewRequest("DELETE", url, nil)
 		if err != nil {
-			log.Print(err)
-			break
+			return nil, err
 		}
 		req.Header.Add("Connection", "close")
 		if response, err = http.Get(url); err != nil {
-			log.Print(err)
-			break
+			return nil, err
 		}
-		defer response.Body.Close()
-		responseBody = responseToString(response)
 
 	case "put":
 		req, err := http.NewRequest("PUT", url, os.Stdin)
@@ -234,38 +218,38 @@ func call(args []string) string {
 		}
 		req.Header.Add("Connection", "close")
 		req.Header.Add("Content-type", contentType)
-		response, err := http.DefaultClient.Do(req)
+		response, err = http.DefaultClient.Do(req)
 		if err != nil {
-			log.Print(err)
-			break
+			return nil, err
 		}
-		defer response.Body.Close()
-		responseBody = responseToString(response)
 
 	default:
-		responseBody = "Invalid <call-type> given.\n"
+		return nil, errors.New("Invalid <call-type> given")
 	}
 	stderr := unhijackStderr(hijack)
 	if stderr != "" {
-		responseBody = stderr
+		return nil, errors.New("Unknown error: " + stderr)
 	}
-
-	if response != nil {
-		globalTelephonoState.History.AddFinishedCall(response)
-	}
-	return responseBody
+	return response, err
 }
 
 func evalCmdLine(g *gocui.Gui) {
+	var err error
+	var response *http.Response
+
 	// FIXME: Deal with errors!
 	cmdLineView, _ := g.View(CMD_LINE_VIEW)
 	rspBodyView, _ := g.View(RSP_BODY_VIEW)
+	mtdBodyView, _ := g.View(MTD_BODY_VIEW)
 	histView, _ := g.View(HIST_VIEW)
+
+	// Extract the command into an args list
 	commandStr := cmdLineView.ViewBuffer()
 	commandStr = strings.TrimSpace(commandStr)
 	args := strings.Split(commandStr, " ")
 
-	if strings.HasPrefix(commandStr, ">") { //Saving resp bodies
+	if strings.HasPrefix(commandStr, ">") {
+		// Save response body to a file
 		if len(args) < 2 {
 			return
 		}
@@ -276,10 +260,24 @@ func evalCmdLine(g *gocui.Gui) {
 	} else if commandStr == "history" {
 		setView(g, HIST_VIEW, HIST_BODY)
 	} else {
+		// Clear out old response
 		rspBodyView.Clear()
-		responseStr := call(args)
-		fmt.Fprint(rspBodyView, responseStr)
+
+		if response, err = call(args); err != nil {
+			// Print error out in place of response body
+			fmt.Fprint(rspBodyView, err)
+		}
+
+		// Print out new response
+		fmt.Fprint(rspBodyView, responseToString(response))
+		defer response.Body.Close()
+
+		// Update the request views
+		updateMethodBodyView(mtdBodyView, response.Request.URL.String(), response.Request.Method)
+
+		// Update the history and history view
 		histView.Clear()
+		globalTelephonoState.History.AddFinishedCall(response)
 		histFormat := globalTelephonoState.History.GetSimpleWholeHistoryReport()
 		fmt.Fprint(histView, histFormat)
 	}
@@ -345,6 +343,21 @@ func switchPrevView(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func updateMethodBodyView(view *gocui.View, url, method string) {
+	view.Clear()
+
+	fmt.Fprintln(view, url)
+	fmt.Fprintln(view)
+	allMethods := []string{"get", "post", "head", "put", "delete", "options"}
+	for _, possibleMethod := range allMethods {
+		x := " "
+		if possibleMethod == strings.ToLower(method) {
+			x = "x"
+		}
+		fmt.Fprintf(view, "[%s] %s\n", x, strings.ToUpper(possibleMethod))
+	}
+}
+
 //Setting the manager
 func layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
@@ -393,14 +406,7 @@ func layout(g *gocui.Gui) error {
 			return err
 		}
 		v.Title = "Method Body"
-		fmt.Fprintln(v, "FIX ME PLEASE")
-		fmt.Fprintln(v)
-		fmt.Fprintln(v, "[ ]"+"GET")
-		fmt.Fprintln(v, "[ ]"+"POST")
-		fmt.Fprintln(v, "[ ]"+"HEAD")
-		fmt.Fprintln(v, "[ ]"+"PUT")
-		fmt.Fprintln(v, "[ ]"+"DELETE")
-		fmt.Fprintln(v, "[ ]"+"OPTIONS")
+		updateMethodBodyView(v, "http://", "get")
 	}
 
 	// Request Headers (e.g. Content-type: text/json)
