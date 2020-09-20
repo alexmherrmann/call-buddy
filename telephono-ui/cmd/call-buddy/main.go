@@ -192,12 +192,12 @@ func call(args []string) (response *http.Response, err error) {
 		}
 
 	case "post":
-		if response, err = http.Get(url); err != nil {
+		if response, err = http.Post(url, contentType, os.Stdin); err != nil {
 			return nil, err
 		}
 
 	case "head":
-		if response, err = http.Get(url); err != nil {
+		if response, err = http.Head(url); err != nil {
 			return nil, err
 		}
 
