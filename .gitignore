@@ -4,5 +4,9 @@
 telephono/debug
 telephono/telephono
 cmd/call-buddy
+
+build/
+/telephono-ui/call-buddy
+launchpad/launchpad
 .DS_Store
 .*.sw*
