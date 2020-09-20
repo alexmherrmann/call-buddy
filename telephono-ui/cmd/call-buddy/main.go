@@ -274,8 +274,7 @@ func evalCmdLine(g *gocui.Gui) {
 		defer fd.Close()
 		fd.WriteString(rspBodyView.ViewBuffer())
 	} else if commandStr == "history" {
-		currView = HIST_BODY
-		switchViewAttr(g, HIST_VIEW)
+		setView(g, HIST_VIEW, HIST_BODY)
 	} else {
 		rspBodyView.Clear()
 		responseStr := call(args)
@@ -286,12 +285,12 @@ func evalCmdLine(g *gocui.Gui) {
 	}
 }
 
-func switchViewAttr(gui *gocui.Gui, next string) {
-	currViewPtr, _ := gui.SetCurrentView(next)
+func setView(gui *gocui.Gui, name string, state ViewState) {
+	currView = state
+	currViewPtr, _ := gui.SetCurrentView(name)
 	// FIXME Dylan: This should be done only if the editor is editable
-	//              Also, why are we instantiating this every time we switch?!
 	currViewPtr.Editor = &theEditor
-	gui.SetViewOnTop(next)
+	gui.SetViewOnTop(name)
 	gui.Cursor = true
 }
 
@@ -301,24 +300,19 @@ func switchNextView(g *gocui.Gui, v *gocui.View) error {
 	switch currView {
 	case CMD_LINE:
 		// -> method body
-		currView = MTD_BODY
-		switchViewAttr(g, MTD_BODY_VIEW)
+		setView(g, MTD_BODY_VIEW, MTD_BODY)
 	case MTD_BODY:
 		// -> request headers
-		currView = RQT_HEAD
-		switchViewAttr(g, RQT_HEAD_VIEW)
+		setView(g, RQT_HEAD_VIEW, RQT_HEAD)
 	case RQT_HEAD:
 		// -> request body
-		currView = RQT_BODY
-		switchViewAttr(g, RQT_BODY_VIEW)
+		setView(g, RQT_BODY_VIEW, RQT_BODY)
 	case RQT_BODY:
 		// -> reqponse body
-		currView = RSP_BODY
-		switchViewAttr(g, RSP_BODY_VIEW)
+		setView(g, RSP_BODY_VIEW, RSP_BODY)
 	case RSP_BODY:
 		// -> command line
-		currView = CMD_LINE
-		switchViewAttr(g, CMD_LINE_VIEW)
+		setView(g, CMD_LINE_VIEW, CMD_LINE)
 	default:
 		log.Panicf("Got to a unknown view! %d\n", currView)
 	}
@@ -332,24 +326,19 @@ func switchPrevView(g *gocui.Gui, v *gocui.View) error {
 	switch currView {
 	case CMD_LINE:
 		// -> method body
-		currView = RSP_BODY
-		switchViewAttr(g, RSP_BODY_VIEW)
+		setView(g, RSP_BODY_VIEW, RSP_BODY)
 	case MTD_BODY:
 		// -> request headers
-		currView = CMD_LINE
-		switchViewAttr(g, CMD_LINE_VIEW)
+		setView(g, CMD_LINE_VIEW, CMD_LINE)
 	case RQT_HEAD:
 		// -> request body
-		currView = MTD_BODY
-		switchViewAttr(g, MTD_BODY_VIEW)
+		setView(g, MTD_BODY_VIEW, MTD_BODY)
 	case RQT_BODY:
 		// -> reqponse body
-		currView = RQT_HEAD
-		switchViewAttr(g, RQT_HEAD_VIEW)
+		setView(g, RQT_HEAD_VIEW, RQT_HEAD)
 	case RSP_BODY:
 		// -> command line
-		currView = RQT_BODY
-		switchViewAttr(g, RQT_BODY_VIEW)
+		setView(g, RQT_BODY_VIEW, RQT_BODY)
 	default:
 		log.Panicf("Got to a unknown view! %d\n", currView)
 	}
@@ -535,17 +524,14 @@ func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
 
 // histOnEnter Populates the history with the currently selected history item
 func histOnEnter(g *gocui.Gui, v *gocui.View) error {
+	defer setView(g, CMD_LINE_VIEW, CMD_LINE)
 	cmd, err := globalTelephonoState.History.GetLastCommand()
 	if err != nil {
-		currView = CMD_LINE
-		switchViewAttr(g, CMD_LINE_VIEW)
 		return err
 	}
 	cmdView, _ := g.View(CMD_LINE_VIEW)
 	cmdView.Clear()
 	fmt.Fprint(cmdView, cmd)
 	cmdView.SetCursor(len(cmd), 0)
-	currView = CMD_LINE
-	switchViewAttr(g, CMD_LINE_VIEW)
 	return nil
 }
