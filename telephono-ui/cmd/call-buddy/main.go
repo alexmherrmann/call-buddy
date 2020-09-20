@@ -240,7 +240,6 @@ func evalCmdLine(g *gocui.Gui) {
 	// FIXME: Deal with errors!
 	cmdLineView, _ := g.View(CMD_LINE_VIEW)
 	rspBodyView, _ := g.View(RSP_BODY_VIEW)
-	mtdBodyView, _ := g.View(MTD_BODY_VIEW)
 	histView, _ := g.View(HIST_VIEW)
 
 	// Extract the command into an args list
@@ -260,26 +259,30 @@ func evalCmdLine(g *gocui.Gui) {
 	} else if commandStr == "history" {
 		setView(g, HIST_VIEW, HIST_BODY)
 	} else {
-		// Clear out old response
-		rspBodyView.Clear()
-
 		if response, err = call(args); err != nil {
 			// Print error out in place of response body
-			fmt.Fprint(rspBodyView, err)
+			updateResponseBodyView(rspBodyView, err.Error())
+			return
 		}
-
-		// Print out new response
-		fmt.Fprint(rspBodyView, responseToString(response))
 		defer response.Body.Close()
 
+		// Print out new response
+		responseBody := responseToString(response)
+		updateResponseBodyView(rspBodyView, responseBody)
+
 		// Update the request views
-		updateMethodBodyView(mtdBodyView, response.Request.URL.String(), response.Request.Method)
+		methodBodyView, _ := g.View(MTD_BODY_VIEW)
+		updateMethodBodyView(methodBodyView, response.Request.URL.String(), response.Request.Method)
+
+		requestHeaderView, _ := g.View(RQT_HEAD_VIEW)
+		updateRequestHeaderView(requestHeaderView, response.Request.Header)
+
+		requestBodyView, _ := g.View(RQT_BODY_VIEW)
+		updateRequestBodyView(requestBodyView, "")
 
 		// Update the history and history view
-		histView.Clear()
 		globalTelephonoState.History.AddFinishedCall(response)
-		histFormat := globalTelephonoState.History.GetSimpleWholeHistoryReport()
-		fmt.Fprint(histView, histFormat)
+		updateHistoryView(histView)
 	}
 }
 
@@ -358,6 +361,31 @@ func updateMethodBodyView(view *gocui.View, url, method string) {
 	}
 }
 
+func updateRequestHeaderView(view *gocui.View, headers map[string][]string) {
+	view.Clear()
+
+	// For some reason golang stores the value as a list... I dunno why
+	for key, values := range headers {
+		fmt.Fprintf(view, "%s: %s\n", key, strings.Join(values, " "))
+	}
+}
+
+func updateRequestBodyView(view *gocui.View, body string) {
+	view.Clear()
+	fmt.Fprint(view, body)
+}
+
+func updateResponseBodyView(view *gocui.View, body string) {
+	view.Clear()
+	fmt.Fprint(view, body)
+}
+
+func updateHistoryView(view *gocui.View) {
+	view.Clear()
+	histFormat := globalTelephonoState.History.GetSimpleWholeHistoryReport()
+	fmt.Fprint(view, histFormat)
+}
+
 //Setting the manager
 func layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
@@ -432,7 +460,6 @@ func layout(g *gocui.Gui) error {
 		v.Wrap = true
 		v.Autoscroll = true
 		v.Editable = true
-
 	}
 
 	// Command Line (e.g. :get http://httpbin.org/get)
