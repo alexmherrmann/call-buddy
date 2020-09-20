@@ -69,8 +69,6 @@ func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.M
 	// FIXME Dylan: Call the parent gocui.Editor.Edit!
 }
 
-var rspBodyStr string = ""
-
 // ViewState Which view is active
 type ViewState int
 
@@ -158,6 +156,7 @@ func responseToString(resp *http.Response) string {
 	if err != nil {
 		return err.Error()
 	}
+	var rspBodyStr string
 	if len(resp.Header) > 1 {
 		for key, value := range resp.Header {
 			rspBodyStr += fmt.Sprintf("%s: %s\n", key, strings.Trim(strings.Join(value, " "), "[]"))
