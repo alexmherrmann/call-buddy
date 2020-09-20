@@ -457,28 +457,6 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
 
-//This function will update the response body (currently) by pressing a variable
-func onEnter(g *gocui.Gui, v *gocui.View) error {
-	// FIXME: Deal with other views
-	if currView == CMD_LINE {
-		evalCmdLine(g)
-	} else if currView == HIST_BODY {
-		cmd, err := globalTelephonoState.History.GetLastCommand()
-		if err != nil {
-			currView = CMD_LINE
-			switchViewAttr(g, CMD_LINE_VIEW)
-			return err
-		}
-		cmdView, _ := g.View(CMD_LINE_VIEW)
-		cmdView.Clear()
-		fmt.Fprint(cmdView, cmd)
-		cmdView.SetCursor(len(cmd), 0)
-		currView = CMD_LINE
-		switchViewAttr(g, CMD_LINE_VIEW)
-	}
-	return nil
-}
-
 func main() {
 	// Switching to stderr since we do some black magic with catching that to
 	// prevent errors from hitting the tui (see hijackStderr)
@@ -498,23 +476,29 @@ func main() {
 	//Setting a manager, sets the view (defined as another function above)
 	g.SetManagerFunc(layout)
 
-	//Setting keybindings
+	// Global Keybindings
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
 		log.Panicln(err)
 	}
-
-	if err := g.SetKeybinding("", gocui.KeyEnter, gocui.ModNone, onEnter); err != nil {
-		log.Panicln(err)
-	}
-
 	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchNextView); err != nil {
 		log.Panicln(err)
 	}
 
+	// View-Specific Keybindings:
+
+	// Command View Keybindings
+	if err := g.SetKeybinding(CMD_LINE_VIEW, gocui.KeyEnter, gocui.ModNone, cmdOnEnter); err != nil {
+		log.Panicln(err)
+	}
+
+	// History View Keybindings
 	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyArrowDown, gocui.ModNone, histArrowDown); err != nil {
 		log.Panicln(err)
 	}
 	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyArrowUp, gocui.ModNone, histArrowUp); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyEnter, gocui.ModNone, histOnEnter); err != nil {
 		log.Panicln(err)
 	}
 
@@ -540,5 +524,28 @@ func histArrowDown(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
 	view.SetCursor(curX, curY+1)
 	historyRowSelected++
+	return nil
+}
+
+// cmdOnEnter Evaluates the command line
+func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
+	evalCmdLine(g)
+	return nil
+}
+
+// histOnEnter Populates the history with the currently selected history item
+func histOnEnter(g *gocui.Gui, v *gocui.View) error {
+	cmd, err := globalTelephonoState.History.GetLastCommand()
+	if err != nil {
+		currView = CMD_LINE
+		switchViewAttr(g, CMD_LINE_VIEW)
+		return err
+	}
+	cmdView, _ := g.View(CMD_LINE_VIEW)
+	cmdView.Clear()
+	fmt.Fprint(cmdView, cmd)
+	cmdView.SetCursor(len(cmd), 0)
+	currView = CMD_LINE
+	switchViewAttr(g, CMD_LINE_VIEW)
 	return nil
 }
