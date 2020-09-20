@@ -49,14 +49,6 @@ type historyEntry struct {
 	requestMap map[string]string
 }
 
-var histList []historyEntry //List for history view
-
-// url {Header: content-type, , ,} \n
-
-func formatHistList() string {
-	return globalTelephonoState.History.GetSimpleWholeHistoryReport()
-}
-
 func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
 	if editor.expectKeyModifier && ch == 'Z' { // Tab for some some some some dumb dumb dumb reason
 		switchPrevView(editor.gui, v)
@@ -76,8 +68,6 @@ func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.M
 	}
 	// FIXME Dylan: Call the parent gocui.Editor.Edit!
 }
-
-var rspBodyStr string = ""
 
 // ViewState Which view is active
 type ViewState int
@@ -166,6 +156,7 @@ func responseToString(resp *http.Response) string {
 	if err != nil {
 		return err.Error()
 	}
+	var rspBodyStr string
 	if len(resp.Header) > 1 {
 		for key, value := range resp.Header {
 			rspBodyStr += fmt.Sprintf("%s: %s\n", key, strings.Trim(strings.Join(value, " "), "[]"))
@@ -197,8 +188,6 @@ func call(args []string) string {
 		contentType = args[2]
 	}
 
-	tempHist := historyEntry{methodType, url, make(map[string]string)}
-
 	switch methodType {
 	case "get":
 		if response, err = http.Get(url); err != nil {
@@ -213,7 +202,6 @@ func call(args []string) string {
 			log.Print(err)
 			break
 		}
-		tempHist.requestMap["Content-type"] = contentType
 		defer response.Body.Close()
 		responseBody = responseToString(response)
 
@@ -246,7 +234,6 @@ func call(args []string) string {
 		}
 		req.Header.Add("Connection", "close")
 		req.Header.Add("Content-type", contentType)
-		tempHist.requestMap["Content-type"] = contentType
 		response, err := http.DefaultClient.Do(req)
 		if err != nil {
 			log.Print(err)
@@ -266,11 +253,6 @@ func call(args []string) string {
 	if response != nil {
 		globalTelephonoState.History.AddFinishedCall(response)
 	}
-
-	//if len(histList) == 0 || !(reflect.DeepEqual(histList[len(histList)-1], tempHist)) {
-	//	histList = append(histList, tempHist) //Adding in current call to the history list
-	//}
-
 	return responseBody
 }
 
@@ -299,7 +281,8 @@ func evalCmdLine(g *gocui.Gui) {
 		responseStr := call(args)
 		fmt.Fprint(rspBodyView, responseStr)
 		histView.Clear()
-		fmt.Fprint(histView, formatHistList())
+		histFormat := globalTelephonoState.History.GetSimpleWholeHistoryReport()
+		fmt.Fprint(histView, histFormat)
 	}
 }
 
@@ -480,12 +463,16 @@ func onEnter(g *gocui.Gui, v *gocui.View) error {
 	if currView == CMD_LINE {
 		evalCmdLine(g)
 	} else if currView == HIST_BODY {
-		curLine := histList[historyRowSelected]
+		cmd, err := globalTelephonoState.History.GetLastCommand()
+		if err != nil {
+			currView = CMD_LINE
+			switchViewAttr(g, CMD_LINE_VIEW)
+			return err
+		}
 		cmdView, _ := g.View(CMD_LINE_VIEW)
 		cmdView.Clear()
-		selectedLine := curLine.method + " " + curLine.url + " " + curLine.requestMap["Content-type"]
-		fmt.Fprint(cmdView, selectedLine)
-		cmdView.SetCursor(len(selectedLine)-1, 0)
+		fmt.Fprint(cmdView, cmd)
+		cmdView.SetCursor(len(cmd), 0)
 		currView = CMD_LINE
 		switchViewAttr(g, CMD_LINE_VIEW)
 	}

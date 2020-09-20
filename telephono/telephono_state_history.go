@@ -1,6 +1,7 @@
 package telephono
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -46,4 +47,21 @@ func (wholeHistory *CallBuddyHistory) GetSimpleWholeHistoryReport() string {
 	}
 
 	return buffer.String()
+}
+
+// ^ Same comment probably applies here -Dylan
+func (wholeHistory *CallBuddyHistory) GetLastCommand() (string, error) {
+	if len(wholeHistory.callsFromCurrentSession) < 0 {
+		return "", errors.New("No call history")
+	}
+	lastCall := wholeHistory.callsFromCurrentSession[0]
+
+	// {method} {request URL} [content-type]
+	cmd := fmt.Sprintf("%s %s", lastCall.request.Method, lastCall.request.URL.String())
+
+	// Golang's net.http.Header is a map[string][]string for some reason
+	if len(lastCall.request.Header["Content-type"]) > 0 {
+		cmd += " " + lastCall.request.Header["Content-type"][0]
+	}
+	return cmd, nil
 }
