@@ -394,7 +394,7 @@ func updateHistoryView(view *gocui.View) {
 func layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
 	realMaxX, realMaxY := maxX-1, maxY-1
-	verticalSplitX := 27         // Defines the vertical split down to the command line
+	verticalSplitX := 50         // Defines the vertical split down to the command line
 	horizontalSplitY := maxY - 4 // Defines the horizontal command line split
 
 	// Call-Buddy Title
