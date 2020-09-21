@@ -11,5 +11,5 @@ cat "$basedir/arch.txt" \
 
 cat "$basedir/arch.txt" \
     | grep -v '^#' \
-    | awk 'NF > 2 { printf "ln -sf %s-%s/ %s-%s\n", $1, $2, $1, $3 }' \
+    | awk 'NF > 2 { printf "ln -sf %s-%s/ build/%s-%s\n", $1, $2, $1, $3 }' \
     | sh
