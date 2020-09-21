@@ -77,8 +77,8 @@ func InitNewState() CallBuddyState {
 
 type CallBuddyCollection struct {
 	Name string
-	// TODO AH: Call templates
-	RequestTemplates []RequestTemplate
+	// TODO AH: Should this really be pointer?
+	RequestTemplates []*RequestTemplate
 }
 
 type CallBuddyEnvironment struct {

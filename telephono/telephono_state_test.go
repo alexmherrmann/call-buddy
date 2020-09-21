@@ -23,7 +23,7 @@ func testSerializeState(t *testing.T) {
 	headers := NewHeadersTemplate()
 	headers.Set("BigBad", "Wolf")
 	coll1 := CallBuddyCollection{
-		RequestTemplates: []RequestTemplate{
+		RequestTemplates: []*RequestTemplate{
 			{
 				Method:         Post,
 				Url:            NewExpandable("https://google.com/"),

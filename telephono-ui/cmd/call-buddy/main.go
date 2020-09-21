@@ -15,21 +15,31 @@ import (
 	"github.com/jroimartin/gocui"
 )
 
-var globalTelephonoState t.CallBuddyState
+var globalTelephonoState *t.CallBuddyState = nil
 
 func init() {
-	globalTelephonoState = t.InitNewState()
+	if f, err := os.OpenFile("tui.log", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755); err != nil {
+		panic(err.Error())
+	} else {
+		log.SetOutput(f)
+	}
+
+	log.Print("Starting up TCB")
+
+	createdState := t.InitNewState()
+	globalTelephonoState = &createdState
 	globalTelephonoState.Collections = append(globalTelephonoState.Collections, t.CallBuddyCollection{
 		Name: "The fake one FIXME up boys",
-		RequestTemplates: []t.RequestTemplate{
+		RequestTemplates: []*t.RequestTemplate{
 			{
-				Method: t.Get, Url: t.NewExpandable("https://{vars.Host}"),
+				Method:         t.Get,
+				Url:            t.NewExpandable("https://{vars.Host}"),
 				Headers:        t.NewHeadersTemplate(),
 				ExpandableBody: t.NewExpandable("Hello World")}},
 	})
 }
 
-func getCurrentRequestTemplate(state *t.CallBuddyState) t.RequestTemplate {
+func getCurrentRequestTemplate(state *t.CallBuddyState) *t.RequestTemplate {
 	// DEMO AH: Obviously this is NOT ok
 	return globalTelephonoState.Collections[0].RequestTemplates[0]
 }
@@ -168,64 +178,29 @@ func responseToString(resp *http.Response) string {
 	return rspBodyStr
 }
 
-func call(args []string) (response *http.Response, err error) {
+// TODO AH: args should probably get broken out into real parameters
+func call(args []string, body string, headers http.Header) (response *http.Response, err error) {
 	// If we run into any issues here, rather than dying we can catch them with
 	// the hijacker and print them out to the tui!
 	hijack := hijackStderr()
 
 	argLen := len(args)
 	if argLen < 2 {
+		// TODO AH: remove content type
 		return nil, errors.New("Invalid Usage: <call-type> <url> [content-type]")
 	}
 
 	methodType := strings.ToLower(args[0])
 	url := args[1]
-	contentType := "text/plain"
-	if argLen > 2 {
-		contentType = args[2]
-	}
+	// TODO AH: Clean up documentation and other places
+	//contentType := "text/plain"
 
-	switch methodType {
-	case "get":
-		if response, err = http.Get(url); err != nil {
-			return nil, err
-		}
+	theTemplate := getCurrentRequestTemplate(globalTelephonoState)
+	theTemplate.Method = t.HttpMethod(strings.ToUpper(methodType))
+	theTemplate.ExpandableBody = t.NewExpandable(body)
+	theTemplate.Url = t.NewExpandable(url)
+	response, err = theTemplate.ExecuteWithClientAndExpander(http.DefaultClient, globalTelephonoState.GenerateExpander())
 
-	case "post":
-		if response, err = http.Post(url, contentType, os.Stdin); err != nil {
-			return nil, err
-		}
-
-	case "head":
-		if response, err = http.Head(url); err != nil {
-			return nil, err
-		}
-
-	case "delete":
-		req, err := http.NewRequest("DELETE", url, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Add("Connection", "close")
-		if response, err = http.Get(url); err != nil {
-			return nil, err
-		}
-
-	case "put":
-		req, err := http.NewRequest("PUT", url, os.Stdin)
-		if err != nil {
-			log.Print(err)
-		}
-		req.Header.Add("Connection", "close")
-		req.Header.Add("Content-type", contentType)
-		response, err = http.DefaultClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-	default:
-		return nil, errors.New("Invalid <call-type> given")
-	}
 	stderr := unhijackStderr(hijack)
 	if stderr != "" {
 		return nil, errors.New("Unknown error: " + stderr)
@@ -240,7 +215,11 @@ func evalCmdLine(g *gocui.Gui) {
 	// FIXME: Deal with errors!
 	cmdLineView, _ := g.View(CMD_LINE_VIEW)
 	rspBodyView, _ := g.View(RSP_BODY_VIEW)
+	rqtBodyView, _ := g.View(RQT_BODY_VIEW)
+	rqtHeaderView, _ := g.View(RQT_HEAD_VIEW)
 	histView, _ := g.View(HIST_VIEW)
+
+	requestBodyBuffer := rqtBodyView.Buffer()
 
 	// Extract the command into an args list
 	commandStr := cmdLineView.ViewBuffer()
@@ -258,8 +237,36 @@ func evalCmdLine(g *gocui.Gui) {
 		fd.WriteString(rspBodyView.ViewBuffer())
 	} else if commandStr == "history" {
 		setView(g, HIST_VIEW, HIST_BODY)
+	} else if strings.HasPrefix(strings.ToLower(commandStr), "header ") {
+		strippedString := commandStr[7:]
+		if splatted := strings.Split(strippedString, "="); len(splatted) == 2 {
+			// We want to set a header
+			headers := getCurrentRequestTemplate(globalTelephonoState).Headers
+			headers.Set(splatted[0], splatted[1])
+
+			var expandedHttpHeaders http.Header
+			var expansionErr []error
+			if expandedHttpHeaders, expansionErr = headers.ExpandAllAsHeader(globalTelephonoState.GenerateExpander()); len(expansionErr) != 0 {
+				for _, err := range expansionErr {
+					// TODO AH: Use fancy new wrapped errors using Printf
+					log.Print("Had an error expanding a header: ", err.Error())
+				}
+			}
+			updateRequestHeaderView(rqtHeaderView, expandedHttpHeaders)
+		}
 	} else {
-		if response, err = call(args); err != nil {
+		headers := getCurrentRequestTemplate(globalTelephonoState).Headers
+
+		var expandedHttpHeaders http.Header
+		var expansionErr []error
+		if expandedHttpHeaders, expansionErr = headers.ExpandAllAsHeader(globalTelephonoState.GenerateExpander()); len(expansionErr) != 0 {
+			for _, err := range expansionErr {
+				// TODO AH: Use fancy new wrapped errors using Printf
+				log.Print("Had an error expanding a header: ", err.Error())
+			}
+		}
+
+		if response, err = call(args, requestBodyBuffer, expandedHttpHeaders); err != nil {
 			// Print error out in place of response body
 			updateResponseBodyView(rspBodyView, err.Error())
 			return
@@ -276,9 +283,6 @@ func evalCmdLine(g *gocui.Gui) {
 
 		requestHeaderView, _ := g.View(RQT_HEAD_VIEW)
 		updateRequestHeaderView(requestHeaderView, response.Request.Header)
-
-		requestBodyView, _ := g.View(RQT_BODY_VIEW)
-		updateRequestBodyView(requestBodyView, "")
 
 		// Update the history and history view
 		globalTelephonoState.History.AddFinishedCall(response)
@@ -361,7 +365,7 @@ func updateMethodBodyView(view *gocui.View, url, method string) {
 	}
 }
 
-func updateRequestHeaderView(view *gocui.View, headers map[string][]string) {
+func updateRequestHeaderView(view *gocui.View, headers http.Header) {
 	view.Clear()
 
 	// For some reason golang stores the value as a list... I dunno why
