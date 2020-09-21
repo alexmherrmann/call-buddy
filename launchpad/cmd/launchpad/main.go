@@ -365,12 +365,12 @@ func remoteRun(target *targetHost, args []string) {
 		}
 		target.arch = remotemeta.arch
 	}
-  
-	localCallBuddyPath := lookupCallBuddyPath(*arch)
+
+	localCallBuddyPath := lookupCallBuddyPath(target.arch)
 	remoteCallBuddyPath := remotemeta.homedir + "/.call-buddy/call-buddy"
 	remoteCallBuddyDir := filepath.Dir(remoteCallBuddyPath)
 
-	log.Printf("Spawning off remote syncing client on %s\n", hostname)
+	log.Printf("Spawning off remote syncing client on %s\n", target.hostname)
 	syncingClient, err := spawnRemoteSyncing(client, remoteCallBuddyDir)
 	if err != nil {
 		// TODO: Inspect the error and don't always fail
@@ -378,7 +378,7 @@ func remoteRun(target *targetHost, args []string) {
 	}
 	defer cleanupRemoteSyncing(syncingClient)
 
-	log.Printf("Syncing call-buddy from %s to remote client at %s@%s:%s\n", localCallBuddyPath, username, hostname, remoteCallBuddyPath)
+	log.Printf("Syncing call-buddy from %s to remote client at %s@%s:%s\n", localCallBuddyPath, target.username, target.hostname, remoteCallBuddyPath)
 	err = bootstrapCallBuddy(syncingClient.sftpClient, localCallBuddyPath, remoteCallBuddyPath)
 	if err != nil {
 		log.Fatalf("Failed to bootstrap self on %s@%s\n", target.username, target.hostname)
