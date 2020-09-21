@@ -365,11 +365,12 @@ func remoteRun(target *targetHost, args []string) {
 		}
 		target.arch = remotemeta.arch
 	}
-
-	// FIXME: This is hardcoded...
+  
+	localCallBuddyPath := lookupCallBuddyPath(*arch)
 	remoteCallBuddyPath := remotemeta.homedir + "/.call-buddy/call-buddy"
 	remoteCallBuddyDir := filepath.Dir(remoteCallBuddyPath)
-	log.Printf("Spawning off remote syncing client on %s\n", target.hostname)
+
+	log.Printf("Spawning off remote syncing client on %s\n", hostname)
 	syncingClient, err := spawnRemoteSyncing(client, remoteCallBuddyDir)
 	if err != nil {
 		// TODO: Inspect the error and don't always fail
@@ -377,10 +378,7 @@ func remoteRun(target *targetHost, args []string) {
 	}
 	defer cleanupRemoteSyncing(syncingClient)
 
-	cwd, _ := os.Getwd()
-	// FIXME: This is also hardcoded...
-	localCallBuddyPath := filepath.Clean(cwd + "/../telephono-ui/build/" + target.arch + "/call-buddy")
-	log.Printf("Syncing call-buddy from %s to remote client at %s@%s:%s\n", localCallBuddyPath, target.username, target.hostname, remoteCallBuddyPath)
+	log.Printf("Syncing call-buddy from %s to remote client at %s@%s:%s\n", localCallBuddyPath, username, hostname, remoteCallBuddyPath)
 	err = bootstrapCallBuddy(syncingClient.sftpClient, localCallBuddyPath, remoteCallBuddyPath)
 	if err != nil {
 		log.Fatalf("Failed to bootstrap self on %s@%s\n", target.username, target.hostname)
@@ -403,13 +401,58 @@ func remoteRun(target *targetHost, args []string) {
 	waitGroup.Wait()
 }
 
+func fileExists(fpath string) bool {
+	_, err := os.Stat(fpath)
+	return err == nil || !os.IsNotExist(err)
+}
+
+func lookupCallBuddyPath(arch string) string {
+	fatalstr := "Could not find " + arch + " call-buddy binary"
+
+	// First try looking for the environment variable
+	if archDir := os.Getenv("TCB_ARCH_DIR"); archDir != "" {
+		potPath := filepath.Join(archDir, arch, "call-buddy")
+		if fileExists(potPath) {
+			return potPath
+		}
+		fatalstr += " in $TCB_ARCH_DIR/ (" + archDir + ")"
+	} else {
+		fatalstr += " via $TCB_ARCH_DIR"
+	}
+
+	// If that fails we'll use the /lib of the prefix of where call-buddy
+	// is since it's most likely there.
+	callBuddyPath, err := exec.LookPath("call-buddy")
+	if err == nil {
+		binDir := filepath.Dir(callBuddyPath) // .../bin/
+		prefix := filepath.Dir(binDir)        // .../
+		basePotPath := filepath.Join(prefix, "lib", "call-buddy")
+		potPath := filepath.Join(basePotPath, arch, "call-buddy")
+		if fileExists(potPath) {
+			return potPath
+		}
+		fatalstr += " nor in " + basePotPath
+	} else {
+		fatalstr += " nor could call-buddy be found"
+	}
+
+	// Otherwise, maybe we could search through the $PATH, but that feels
+	// a bit hacky, plus we have to deal with the can of worms of symbolic
+	// links and the like
+	log.Fatal(fatalstr)
+	return ""
+}
+
 func localRun(args []string) {
-	localCallBuddyPath := "../telephono-ui/call-buddy"
+	callBuddyPath, err := exec.LookPath("call-buddy")
+	if err != nil {
+		log.Fatal("Could not find call-buddy in $PATH!")
+	}
 	// We don't have a full argv here since we are missing arg 0: the executable name
-	argsWithArg0 := append([]string{filepath.Base(localCallBuddyPath)}, args...)
+	argv := append([]string{callBuddyPath}, args...)
 	exe := &exec.Cmd{
-		Path:   localCallBuddyPath,
-		Args:   argsWithArg0,
+		Path:   callBuddyPath,
+		Args:   argv,
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 		Stdin:  os.Stdin,

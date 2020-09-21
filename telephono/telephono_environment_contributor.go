@@ -10,9 +10,10 @@ type EnvironmentContributor struct {
 	cached bool
 }
 
-//refresh will go pull all of the environment variables
+//refresh will go pull all of the environment variables and update them
 func (e *EnvironmentContributor) refresh() error {
 	e.cache = make(map[string]string)
+	e.cached = true
 
 	for _, kv := range os.Environ() {
 		parts := strings.SplitN(kv, "=", 2)
@@ -22,6 +23,7 @@ func (e *EnvironmentContributor) refresh() error {
 	return nil
 }
 
+//Contribute will give the environment variables back out
 func (e EnvironmentContributor) Contribute() (string, interface{}, error) {
 	if !e.cached {
 		_ = e.refresh()

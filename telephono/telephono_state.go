@@ -36,17 +36,53 @@ environments, call templates, possibly history, variables, etc. are all in here
 It can be shipped to remote servers to be run
 */
 type CallBuddyState struct {
-	Collections  []CallBuddyCollection
+	// The big 3.
+
+	// Our collections of request templates
+	Collections []CallBuddyCollection
+	// The environments we source our variables from
 	Environments []CallBuddyEnvironment
+
+	// The history of calls made (just during this session?)
+	History CallBuddyHistory
+}
+
+// NOTE AH: This should become private and will be used
+// GenerateExpander will take the contributors and generate an expander on the fly for a call being made
+func (state CallBuddyState) GenerateExpander() Expander {
+	contributors := make([]ContextContributor, len(state.Environments))
+	for idx, environment := range state.Environments {
+		contributors[idx] = environment.StoredVariables
+	}
+
+	toReturn := Expander{
+		contributors: contributors,
+	}
+
+	return toReturn
+}
+
+//InitNewState creates a correctly initialized CallBuddyState with some defaults
+func InitNewState() CallBuddyState {
+
+	environmentContributor := EnvironmentContributor{}
+
+	environmentContributor.refresh()
+	return CallBuddyState{
+		Collections:  []CallBuddyCollection{},
+		Environments: []CallBuddyEnvironment{{environmentContributor}},
+		History:      CallBuddyHistory{},
+	}
 }
 
 type CallBuddyCollection struct {
+	Name string
 	// TODO AH: Call templates
 	RequestTemplates []RequestTemplate
 }
 
 type CallBuddyEnvironment struct {
-	StoredVariables SimpleContributor
+	StoredVariables ContextContributor
 }
 
 type CallBuddyInternalState struct {

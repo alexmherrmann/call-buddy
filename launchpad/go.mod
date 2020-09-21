@@ -1,4 +1,4 @@
-module telephono
+module github.com/call-buddy/call-buddy/launchpad
 
 go 1.13
 

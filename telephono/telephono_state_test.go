@@ -8,14 +8,16 @@ import (
 	"testing"
 )
 
-func TestSerializeState(t *testing.T) {
+func testSerializeState(t *testing.T) {
 	// Environment 1 setup
-	env1 := CallBuddyEnvironment{NewSimpleContributor("Var")}
-	env1.StoredVariables.Set("Environment", "Env1")
+	simpleContributor1 := NewSimpleContributor("Var")
+	env1 := CallBuddyEnvironment{simpleContributor1}
+	simpleContributor1.Set("Environment", "Env1")
 
 	// Environment 2 setup
-	env2 := CallBuddyEnvironment{NewSimpleContributor("Var")}
-	env2.StoredVariables.Set("Environment", "Env2")
+	simpleContributor2 := NewSimpleContributor("Var")
+	env2 := CallBuddyEnvironment{simpleContributor2}
+	simpleContributor2.Set("Environment", "Env2")
 
 	// Set up a collection
 	headers := NewHeadersTemplate()

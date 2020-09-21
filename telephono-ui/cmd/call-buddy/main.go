@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,10 +11,64 @@ import (
 	"os"
 	"strings"
 
+	t "github.com/call-buddy/call-buddy/telephono"
 	"github.com/jroimartin/gocui"
 )
 
-var rspBodyStr string = ""
+var globalTelephonoState t.CallBuddyState
+
+func init() {
+	globalTelephonoState = t.InitNewState()
+	globalTelephonoState.Collections = append(globalTelephonoState.Collections, t.CallBuddyCollection{
+		Name: "The fake one FIXME up boys",
+		RequestTemplates: []t.RequestTemplate{
+			{
+				Method: t.Get, Url: t.NewExpandable("https://{vars.Host}"),
+				Headers:        t.NewHeadersTemplate(),
+				ExpandableBody: t.NewExpandable("Hello World")}},
+	})
+}
+
+func getCurrentRequestTemplate(state *t.CallBuddyState) t.RequestTemplate {
+	// DEMO AH: Obviously this is NOT ok
+	return globalTelephonoState.Collections[0].RequestTemplates[0]
+}
+
+var theEditor TCBEditor
+var historyRowSelected int
+
+type TCBEditor struct {
+	// This is super dumb that I have to embed this, no way to pass it in...
+	gui               *gocui.Gui
+	expectKeyModifier bool
+}
+
+//What will comprise each history entry
+type historyEntry struct {
+	method     string
+	url        string
+	requestMap map[string]string
+}
+
+func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
+	if editor.expectKeyModifier && ch == 'Z' { // Tab for some some some some dumb dumb dumb reason
+		switchPrevView(editor.gui, v)
+		editor.expectKeyModifier = false
+		return
+	}
+
+	switch {
+	case ch != 0 && mod == 0:
+		v.EditWrite(ch)
+	case key == gocui.KeySpace:
+		v.EditWrite(' ')
+	case key == gocui.KeyBackspace || key == gocui.KeyBackspace2:
+		v.EditDelete(true)
+	case ch == '[' && mod == gocui.ModAlt:
+		editor.expectKeyModifier = true
+	}
+	// FIXME Dylan: Call the parent gocui.Editor.Edit!
+}
 
 // ViewState Which view is active
 type ViewState int
@@ -27,6 +82,8 @@ const (
 	RQT_HEAD
 	// RQT_BODY The request body view is active
 	RQT_BODY
+	// HIST_BODY The history body is active
+	HIST_BODY
 	// RSP_BODY The response body view is active
 	RSP_BODY
 	// NO_STATE No state is selected
@@ -44,6 +101,8 @@ const (
 	RQT_BODY_VIEW = "request_body"
 	// RSP_BODY_VIEW The response body view string
 	RSP_BODY_VIEW = "response_body"
+	// HIST_VIEW The history body view string
+	HIST_VIEW = "history_body"
 )
 
 type ioHijacker struct {
@@ -52,7 +111,7 @@ type ioHijacker struct {
 	channel    chan string
 }
 
-var currView ViewState = NO_STATE
+var currView ViewState = NO_STATE //needs a better name
 
 func die(msg string) {
 	os.Stderr.WriteString(msg)
@@ -92,11 +151,13 @@ func unhijackStderr(hijacker *ioHijacker) string {
 	return <-hijacker.channel
 }
 
+// responseToString Creates a "report" of the response
 func responseToString(resp *http.Response) string {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return err.Error()
 	}
+	var rspBodyStr string
 	if len(resp.Header) > 1 {
 		for key, value := range resp.Header {
 			rspBodyStr += fmt.Sprintf("%s: %s\n", key, strings.Trim(strings.Join(value, " "), "[]"))
@@ -107,65 +168,48 @@ func responseToString(resp *http.Response) string {
 	return rspBodyStr
 }
 
-func call(args []string) string {
-	var r string
+func call(args []string) (response *http.Response, err error) {
 	// If we run into any issues here, rather than dying we can catch them with
 	// the hijacker and print them out to the tui!
 	hijack := hijackStderr()
 
 	argLen := len(args)
 	if argLen < 2 {
-		return "Usage: <call-type> <url> [content-type]"
+		return nil, errors.New("Invalid Usage: <call-type> <url> [content-type]")
 	}
 
-	callType := strings.ToLower(args[0])
+	methodType := strings.ToLower(args[0])
 	url := args[1]
 	contentType := "text/plain"
 	if argLen > 2 {
 		contentType = args[2]
 	}
-	switch callType {
+
+	switch methodType {
 	case "get":
-		resp, err := http.Get(url)
-		if err != nil {
-			log.Print(err)
-			break
+		if response, err = http.Get(url); err != nil {
+			return nil, err
 		}
-		defer resp.Body.Close()
-		r = responseToString(resp)
 
 	case "post":
-		resp, err := http.Post(url, contentType, os.Stdin)
-		if err != nil {
-			log.Print(err)
-			break
+		if response, err = http.Post(url, contentType, os.Stdin); err != nil {
+			return nil, err
 		}
-		defer resp.Body.Close()
-		r = responseToString(resp)
 
 	case "head":
-		resp, err := http.Head(url)
-		if err != nil {
-			log.Print(err)
-			break
+		if response, err = http.Head(url); err != nil {
+			return nil, err
 		}
-		defer resp.Body.Close()
-		r = responseToString(resp)
 
 	case "delete":
 		req, err := http.NewRequest("DELETE", url, nil)
 		if err != nil {
-			log.Print(err)
-			break
+			return nil, err
 		}
 		req.Header.Add("Connection", "close")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Print(err)
-			break
+		if response, err = http.Get(url); err != nil {
+			return nil, err
 		}
-		defer resp.Body.Close()
-		r = responseToString(resp)
 
 	case "put":
 		req, err := http.NewRequest("PUT", url, os.Stdin)
@@ -174,34 +218,37 @@ func call(args []string) string {
 		}
 		req.Header.Add("Connection", "close")
 		req.Header.Add("Content-type", contentType)
-		resp, err := http.DefaultClient.Do(req)
+		response, err = http.DefaultClient.Do(req)
 		if err != nil {
-			log.Print(err)
-			break
+			return nil, err
 		}
-		defer resp.Body.Close()
-		r = responseToString(resp)
 
 	default:
-		r = "Invalid <call-type> given.\n"
+		return nil, errors.New("Invalid <call-type> given")
 	}
 	stderr := unhijackStderr(hijack)
 	if stderr != "" {
-		r = stderr
+		return nil, errors.New("Unknown error: " + stderr)
 	}
-
-	return r
+	return response, err
 }
 
 func evalCmdLine(g *gocui.Gui) {
+	var err error
+	var response *http.Response
+
 	// FIXME: Deal with errors!
 	cmdLineView, _ := g.View(CMD_LINE_VIEW)
 	rspBodyView, _ := g.View(RSP_BODY_VIEW)
+	histView, _ := g.View(HIST_VIEW)
+
+	// Extract the command into an args list
 	commandStr := cmdLineView.ViewBuffer()
 	commandStr = strings.TrimSpace(commandStr)
 	args := strings.Split(commandStr, " ")
 
 	if strings.HasPrefix(commandStr, ">") {
+		// Save response body to a file
 		if len(args) < 2 {
 			return
 		}
@@ -209,46 +256,134 @@ func evalCmdLine(g *gocui.Gui) {
 		fd, _ := os.Create(outfile)
 		defer fd.Close()
 		fd.WriteString(rspBodyView.ViewBuffer())
+	} else if commandStr == "history" {
+		setView(g, HIST_VIEW, HIST_BODY)
 	} else {
-		rspBodyView.Clear()
-		responseStr := call(args)
-		fmt.Fprint(rspBodyView, responseStr)
+		if response, err = call(args); err != nil {
+			// Print error out in place of response body
+			updateResponseBodyView(rspBodyView, err.Error())
+			return
+		}
+		defer response.Body.Close()
+
+		// Print out new response
+		responseBody := responseToString(response)
+		updateResponseBodyView(rspBodyView, responseBody)
+
+		// Update the request views
+		methodBodyView, _ := g.View(MTD_BODY_VIEW)
+		updateMethodBodyView(methodBodyView, response.Request.URL.String(), response.Request.Method)
+
+		requestHeaderView, _ := g.View(RQT_HEAD_VIEW)
+		updateRequestHeaderView(requestHeaderView, response.Request.Header)
+
+		requestBodyView, _ := g.View(RQT_BODY_VIEW)
+		updateRequestBodyView(requestBodyView, "")
+
+		// Update the history and history view
+		globalTelephonoState.History.AddFinishedCall(response)
+		updateHistoryView(histView)
 	}
 }
 
-func switchView(g *gocui.Gui, v *gocui.View) error {
+func setView(gui *gocui.Gui, name string, state ViewState) {
+	currView = state
+	currViewPtr, _ := gui.SetCurrentView(name)
+	// FIXME Dylan: This should be done only if the editor is editable
+	currViewPtr.Editor = &theEditor
+	gui.SetViewOnTop(name)
+	gui.Cursor = true
+}
+
+func switchNextView(g *gocui.Gui, v *gocui.View) error {
 	// FIXME: Properly handle errors
-	switchViewAttrFunc := func(gui *gocui.Gui, next string) {
-		gui.SetCurrentView(next)
-		g.SetViewOnTop(next)
-		g.Cursor = true
-	}
 	// Round robben switching between views
 	switch currView {
 	case CMD_LINE:
 		// -> method body
-		currView = MTD_BODY
-		switchViewAttrFunc(g, MTD_BODY_VIEW)
+		setView(g, MTD_BODY_VIEW, MTD_BODY)
 	case MTD_BODY:
 		// -> request headers
-		currView = RQT_HEAD
-		switchViewAttrFunc(g, RQT_HEAD_VIEW)
+		setView(g, RQT_HEAD_VIEW, RQT_HEAD)
 	case RQT_HEAD:
 		// -> request body
-		currView = RQT_BODY
-		switchViewAttrFunc(g, RQT_BODY_VIEW)
+		setView(g, RQT_BODY_VIEW, RQT_BODY)
 	case RQT_BODY:
 		// -> reqponse body
-		currView = RSP_BODY
-		switchViewAttrFunc(g, RSP_BODY_VIEW)
+		setView(g, RSP_BODY_VIEW, RSP_BODY)
 	case RSP_BODY:
 		// -> command line
-		currView = CMD_LINE
-		switchViewAttrFunc(g, CMD_LINE_VIEW)
+		setView(g, CMD_LINE_VIEW, CMD_LINE)
 	default:
 		log.Panicf("Got to a unknown view! %d\n", currView)
 	}
 	return nil
+}
+
+func switchPrevView(g *gocui.Gui, v *gocui.View) error {
+	// FIXME: Properly handle errors
+
+	// Round robben switching between views
+	switch currView {
+	case CMD_LINE:
+		// -> method body
+		setView(g, RSP_BODY_VIEW, RSP_BODY)
+	case MTD_BODY:
+		// -> request headers
+		setView(g, CMD_LINE_VIEW, CMD_LINE)
+	case RQT_HEAD:
+		// -> request body
+		setView(g, MTD_BODY_VIEW, MTD_BODY)
+	case RQT_BODY:
+		// -> reqponse body
+		setView(g, RQT_HEAD_VIEW, RQT_HEAD)
+	case RSP_BODY:
+		// -> command line
+		setView(g, RQT_BODY_VIEW, RQT_BODY)
+	default:
+		log.Panicf("Got to a unknown view! %d\n", currView)
+	}
+	return nil
+}
+
+func updateMethodBodyView(view *gocui.View, url, method string) {
+	view.Clear()
+
+	fmt.Fprintln(view, url)
+	fmt.Fprintln(view)
+	allMethods := []string{"get", "post", "head", "put", "delete", "options"}
+	for _, possibleMethod := range allMethods {
+		x := " "
+		if possibleMethod == strings.ToLower(method) {
+			x = "x"
+		}
+		fmt.Fprintf(view, "[%s] %s\n", x, strings.ToUpper(possibleMethod))
+	}
+}
+
+func updateRequestHeaderView(view *gocui.View, headers map[string][]string) {
+	view.Clear()
+
+	// For some reason golang stores the value as a list... I dunno why
+	for key, values := range headers {
+		fmt.Fprintf(view, "%s: %s\n", key, strings.Join(values, " "))
+	}
+}
+
+func updateRequestBodyView(view *gocui.View, body string) {
+	view.Clear()
+	fmt.Fprint(view, body)
+}
+
+func updateResponseBodyView(view *gocui.View, body string) {
+	view.Clear()
+	fmt.Fprint(view, body)
+}
+
+func updateHistoryView(view *gocui.View) {
+	view.Clear()
+	histFormat := globalTelephonoState.History.GetSimpleWholeHistoryReport()
+	fmt.Fprint(view, histFormat)
 }
 
 //Setting the manager
@@ -268,8 +403,20 @@ func layout(g *gocui.Gui) error {
 		fmt.Fprint(v, "\u001b[32mTerminal "+"\u001b[29mCall "+"\u001b[29mBuddy")
 	}
 
+	historyYEnd := titleYStart + 6
+	//History View
+	if v, err := g.SetView(HIST_VIEW, verticalSplitX+1, titleYStart, realMaxX, historyYEnd); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "History"
+		v.Wrap = false
+		v.Editable = false
+		v.Autoscroll = true
+	}
+
 	// Response Body (e.g. html)
-	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, titleYStart, realMaxX, horizontalSplitY); err != nil {
+	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, historyYEnd+1, realMaxX, horizontalSplitY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -287,14 +434,7 @@ func layout(g *gocui.Gui) error {
 			return err
 		}
 		v.Title = "Method Body"
-		fmt.Fprintln(v, "> https://google.com")
-		fmt.Fprintln(v)
-		fmt.Fprintln(v, "[ ]"+"GET")
-		fmt.Fprintln(v, "[ ]"+"POST")
-		fmt.Fprintln(v, "[ ]"+"HEAD")
-		fmt.Fprintln(v, "[ ]"+"PUT")
-		fmt.Fprintln(v, "[ ]"+"DELETE")
-		fmt.Fprintln(v, "[ ]"+"OPTIONS")
+		updateMethodBodyView(v, "http://", "get")
 	}
 
 	// Request Headers (e.g. Content-type: text/json)
@@ -339,15 +479,6 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
 
-//This function will update the response body (currently) by pressing a variable
-func onEnter(g *gocui.Gui, v *gocui.View) error {
-	// FIXME: Deal with other views
-	if currView == CMD_LINE {
-		evalCmdLine(g)
-	}
-	return nil
-}
-
 func main() {
 	// Switching to stderr since we do some black magic with catching that to
 	// prevent errors from hitting the tui (see hijackStderr)
@@ -359,6 +490,7 @@ func main() {
 	}
 	defer g.Close()
 
+	theEditor = TCBEditor{g, false}
 	g.Highlight = true
 	g.Cursor = true
 	g.SelFgColor = gocui.ColorGreen
@@ -366,16 +498,29 @@ func main() {
 	//Setting a manager, sets the view (defined as another function above)
 	g.SetManagerFunc(layout)
 
-	//Setting keybindings
+	// Global Keybindings
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
 		log.Panicln(err)
 	}
-
-	if err := g.SetKeybinding("", gocui.KeyEnter, gocui.ModNone, onEnter); err != nil {
+	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchNextView); err != nil {
 		log.Panicln(err)
 	}
 
-	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchView); err != nil {
+	// View-Specific Keybindings:
+
+	// Command View Keybindings
+	if err := g.SetKeybinding(CMD_LINE_VIEW, gocui.KeyEnter, gocui.ModNone, cmdOnEnter); err != nil {
+		log.Panicln(err)
+	}
+
+	// History View Keybindings
+	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyArrowDown, gocui.ModNone, histArrowDown); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyArrowUp, gocui.ModNone, histArrowUp); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyEnter, gocui.ModNone, histOnEnter); err != nil {
 		log.Panicln(err)
 	}
 
@@ -385,4 +530,41 @@ func main() {
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 		log.Panicln(err)
 	}
+}
+
+func histArrowUp(gui *gocui.Gui, view *gocui.View) error {
+	curX, curY := view.Cursor()
+	if curY > 0 {
+		curY -= 1
+		historyRowSelected--
+	}
+	view.SetCursor(curX, curY)
+	return nil
+}
+
+func histArrowDown(gui *gocui.Gui, view *gocui.View) error {
+	curX, curY := view.Cursor()
+	view.SetCursor(curX, curY+1)
+	historyRowSelected++
+	return nil
+}
+
+// cmdOnEnter Evaluates the command line
+func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
+	evalCmdLine(g)
+	return nil
+}
+
+// histOnEnter Populates the history with the currently selected history item
+func histOnEnter(g *gocui.Gui, v *gocui.View) error {
+	defer setView(g, CMD_LINE_VIEW, CMD_LINE)
+	cmd, err := globalTelephonoState.History.GetLastCommand()
+	if err != nil {
+		return err
+	}
+	cmdView, _ := g.View(CMD_LINE_VIEW)
+	cmdView.Clear()
+	fmt.Fprint(cmdView, cmd)
+	cmdView.SetCursor(len(cmd), 0)
+	return nil
 }

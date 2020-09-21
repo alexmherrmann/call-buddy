@@ -7,3 +7,6 @@ clean:
 
 launchpad: cmd/launchpad/*.go
 	go build -o $@ $^
+
+install: launchpad
+	cp launchpad $(realprefix)/bin/
