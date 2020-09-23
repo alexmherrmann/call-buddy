@@ -416,7 +416,7 @@ func layout(g *gocui.Gui) error {
 		v.Title = "History"
 		v.Wrap = false
 		v.Editable = false
-		v.Autoscroll = true
+		v.Autoscroll = false
 	}
 
 	// Response Body (e.g. html)
@@ -538,7 +538,7 @@ func main() {
 
 func histArrowUp(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
-	if curY > 0 {
+	if curY > 0 && globalTelephonoState.History.Size() > 0 {
 		curY -= 1
 		historyRowSelected--
 	}
@@ -548,8 +548,11 @@ func histArrowUp(gui *gocui.Gui, view *gocui.View) error {
 
 func histArrowDown(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
-	view.SetCursor(curX, curY+1)
-	historyRowSelected++
+	if curY < globalTelephonoState.History.Size()-1 {
+		curY += 1
+		historyRowSelected++
+	}
+	view.SetCursor(curX, curY)
 	return nil
 }
 
@@ -562,8 +565,10 @@ func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
 // histOnEnter Populates the history with the currently selected history item
 func histOnEnter(g *gocui.Gui, v *gocui.View) error {
 	defer setView(g, CMD_LINE_VIEW, CMD_LINE)
-	cmd, err := globalTelephonoState.History.GetLastCommand()
+	_, curY := v.Cursor()
+	cmd, err := globalTelephonoState.History.GetNthCommand(curY)
 	if err != nil {
+		log.Fatalf("pos: %d\n", curY)
 		return err
 	}
 	cmdView, _ := g.View(CMD_LINE_VIEW)
