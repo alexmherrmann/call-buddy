@@ -65,3 +65,7 @@ func (wholeHistory *CallBuddyHistory) GetLastCommand() (string, error) {
 	}
 	return cmd, nil
 }
+
+func (wholeHistory *CallBuddyHistory) Size() int {
+	return len(wholeHistory.callsFromCurrentSession)
+}

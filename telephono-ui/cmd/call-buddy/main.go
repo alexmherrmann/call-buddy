@@ -538,7 +538,7 @@ func main() {
 
 func histArrowUp(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
-	if curY > 0 {
+	if curY > 0 && globalTelephonoState.History.Size() > 0 {
 		curY -= 1
 		historyRowSelected--
 	}
@@ -548,8 +548,11 @@ func histArrowUp(gui *gocui.Gui, view *gocui.View) error {
 
 func histArrowDown(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
-	view.SetCursor(curX, curY+1)
-	historyRowSelected++
+	if curY < globalTelephonoState.History.Size()-1 {
+		curY += 1
+		historyRowSelected++
+	}
+	view.SetCursor(curX, curY)
 	return nil
 }
 
