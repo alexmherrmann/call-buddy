@@ -45,19 +45,11 @@ func getCurrentRequestTemplate(state *t.CallBuddyState) *t.RequestTemplate {
 }
 
 var theEditor TCBEditor
-var historyRowSelected int
 
 type TCBEditor struct {
 	// This is super dumb that I have to embed this, no way to pass it in...
 	gui               *gocui.Gui
 	expectKeyModifier bool
-}
-
-//What will comprise each history entry
-type historyEntry struct {
-	method     string
-	url        string
-	requestMap map[string]string
 }
 
 func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.Modifier) {
@@ -540,7 +532,6 @@ func histArrowUp(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
 	if curY > 0 && globalTelephonoState.History.Size() > 0 {
 		curY -= 1
-		historyRowSelected--
 	}
 	view.SetCursor(curX, curY)
 	return nil
@@ -550,7 +541,6 @@ func histArrowDown(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
 	if curY < globalTelephonoState.History.Size()-1 {
 		curY += 1
-		historyRowSelected++
 	}
 	view.SetCursor(curX, curY)
 	return nil
