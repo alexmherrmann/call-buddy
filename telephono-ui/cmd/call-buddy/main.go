@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -120,39 +118,6 @@ func die(msg string) {
 	os.Exit(1)
 }
 
-// This function hijacks stderr and makes the errors go to a buffer (rather
-// the screen)
-func hijackStderr() *ioHijacker {
-	// Backup of the real stderr so we can restore it later
-	stderr := os.Stderr
-	rpipe, wpipe, _ := os.Pipe()
-	os.Stderr = wpipe
-	log.SetOutput(wpipe)
-
-	hijackChannel := make(chan string)
-	// Copy the stderr in a separate goroutine we don't block indefinitely
-	go func() {
-		var buf bytes.Buffer
-		io.Copy(&buf, rpipe)
-		hijackChannel <- buf.String()
-	}()
-
-	return &ioHijacker{
-		backupFile: stderr,
-		pipe:       wpipe,
-		channel:    hijackChannel,
-	}
-}
-
-// Returns a string of any errors that were supposed to go to stderr
-func unhijackStderr(hijacker *ioHijacker) string {
-	hijacker.pipe.Close()
-	// Restore the real stderr
-	os.Stderr = hijacker.backupFile
-	log.SetOutput(os.Stderr)
-	return <-hijacker.channel
-}
-
 // responseToString Creates a "report" of the response
 func responseToString(resp *http.Response) string {
 	body, err := ioutil.ReadAll(resp.Body)
@@ -172,10 +137,6 @@ func responseToString(resp *http.Response) string {
 
 // TODO AH: args should probably get broken out into real parameters
 func call(args []string, body string, headers http.Header) (response *http.Response, err error) {
-	// If we run into any issues here, rather than dying we can catch them with
-	// the hijacker and print them out to the tui!
-	hijack := hijackStderr()
-
 	argLen := len(args)
 	if argLen < 2 {
 		// TODO AH: remove content type
@@ -191,13 +152,7 @@ func call(args []string, body string, headers http.Header) (response *http.Respo
 	theTemplate.Method = t.HttpMethod(strings.ToUpper(methodType))
 	theTemplate.ExpandableBody = t.NewExpandable(body)
 	theTemplate.Url = t.NewExpandable(url)
-	response, err = theTemplate.ExecuteWithClientAndExpander(http.DefaultClient, globalTelephonoState.GenerateExpander())
-
-	stderr := unhijackStderr(hijack)
-	if stderr != "" {
-		return nil, errors.New("Unknown error: " + stderr)
-	}
-	return response, err
+	return theTemplate.ExecuteWithClientAndExpander(http.DefaultClient, globalTelephonoState.GenerateExpander())
 }
 
 func evalCmdLine(g *gocui.Gui) {
@@ -476,9 +431,6 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 }
 
 func main() {
-	// Switching to stderr since we do some black magic with catching that to
-	// prevent errors from hitting the tui (see hijackStderr)
-
 	//Setting up a new TUI
 	g, err := gocui.NewGui(gocui.OutputNormal)
 	if err != nil {
