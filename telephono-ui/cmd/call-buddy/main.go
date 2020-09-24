@@ -43,8 +43,6 @@ func getCurrentRequestTemplate(state *t.CallBuddyState) *t.RequestTemplate {
 	return globalTelephonoState.Collections[0].RequestTemplates[0]
 }
 
-var theEditor TCBEditor
-
 type TCBEditor struct {
 	// This is super dumb that I have to embed this, no way to pass it in...
 	gui               *gocui.Gui
@@ -84,6 +82,13 @@ func (properties viewProperties) updateViewProperties(view *gocui.View) {
 	view.Wrap = properties.wrap
 	view.Editable = properties.editable
 	view.Autoscroll = properties.autoscroll
+}
+
+func (properties viewProperties) setToCurrentView(gui *gocui.Gui) {
+	currView, _ := gui.SetCurrentView(properties.name)
+	properties.updateViewProperties(currView)
+	gui.SetViewOnTop(properties.name)
+	gui.Cursor = true
 }
 
 const (
@@ -219,7 +224,7 @@ func enterHistoryView(g *gocui.Gui) {
 	g.Update(func(gui *gocui.Gui) error {
 		gui.SetManagerFunc(histLayout)
 		gui.Update(func(nGui *gocui.Gui) error {
-			setView(nGui, HISTORY_VIEW)
+			views[HISTORY_VIEW].setToCurrentView(g)
 			return nil
 		})
 		gui.Update(setKeybindings)
@@ -237,7 +242,7 @@ func exitHistoryView(g *gocui.Gui) {
 		gui.SetManagerFunc(layout)
 		return nil
 	})
-	setView(g, COMMAND_LINE_VIEW)
+	views[COMMAND_LINE_VIEW].setToCurrentView(g)
 	g.Update(setKeybindings)
 }
 
@@ -324,39 +329,30 @@ func evalCmdLine(g *gocui.Gui) {
 	}
 }
 
-func setView(gui *gocui.Gui, name string) {
-	currView, _ := gui.SetCurrentView(name)
-	// FIXME Dylan: This should be done only if the editor is editable
-	currView.Editor = &theEditor
-	gui.SetViewOnTop(name)
-	gui.Cursor = true
-	views[name].updateViewProperties(currView)
-}
-
 func switchNextView(g *gocui.Gui, currView *gocui.View) error {
 	// FIXME: Properly handle errors
 	// Round robben switching between views
 	if currView == nil {
-		setView(g, COMMAND_LINE_VIEW)
+		views[COMMAND_LINE_VIEW].setToCurrentView(g)
 		return nil
 	}
 
 	switch currView.Name() {
 	case COMMAND_LINE_VIEW:
 		// -> method body
-		setView(g, METHOD_BODY_VIEW)
+		views[METHOD_BODY_VIEW].setToCurrentView(g)
 	case METHOD_BODY_VIEW:
 		// -> request headers
-		setView(g, REQUEST_HEADERS_VIEW)
+		views[REQUEST_HEADERS_VIEW].setToCurrentView(g)
 	case REQUEST_HEADERS_VIEW:
 		// -> request body
-		setView(g, REQUEST_BODY_VIEW)
+		views[REQUEST_BODY_VIEW].setToCurrentView(g)
 	case REQUEST_BODY_VIEW:
 		// -> reqponse body
-		setView(g, RESPONSE_BODY_VIEW)
+		views[RESPONSE_BODY_VIEW].setToCurrentView(g)
 	case RESPONSE_BODY_VIEW:
 		// -> command line
-		setView(g, COMMAND_LINE_VIEW)
+		views[COMMAND_LINE_VIEW].setToCurrentView(g)
 	case HISTORY_VIEW:
 		exitHistoryView(g)
 	default:
@@ -367,24 +363,28 @@ func switchNextView(g *gocui.Gui, currView *gocui.View) error {
 
 func switchPrevView(g *gocui.Gui, currView *gocui.View) error {
 	// FIXME: Properly handle errors
-
 	// Round robben switching between views
+	if currView == nil {
+		views[COMMAND_LINE_VIEW].setToCurrentView(g)
+		return nil
+	}
+
 	switch currView.Name() {
 	case COMMAND_LINE_VIEW:
 		// -> response body
-		setView(g, RESPONSE_BODY_VIEW)
+		views[RESPONSE_BODY_VIEW].setToCurrentView(g)
 	case METHOD_BODY_VIEW:
 		// -> command line
-		setView(g, COMMAND_LINE_VIEW)
+		views[COMMAND_LINE_VIEW].setToCurrentView(g)
 	case REQUEST_HEADERS_VIEW:
 		// -> method body
-		setView(g, METHOD_BODY_VIEW)
+		views[METHOD_BODY_VIEW].setToCurrentView(g)
 	case REQUEST_BODY_VIEW:
 		// -> request header
-		setView(g, REQUEST_HEADERS_VIEW)
+		views[REQUEST_HEADERS_VIEW].setToCurrentView(g)
 	case RESPONSE_BODY_VIEW:
 		// -> request body
-		setView(g, REQUEST_BODY_VIEW)
+		views[REQUEST_BODY_VIEW].setToCurrentView(g)
 	case HISTORY_VIEW:
 		exitHistoryView(g)
 	default:
@@ -396,9 +396,9 @@ func switchPrevView(g *gocui.Gui, currView *gocui.View) error {
 func setHistView(g *gocui.Gui, v *gocui.View) error {
 	// FIXME CP: POSSIBLY SWITCH BACK TO LAST SELECTED VIEW?
 	if v.Name() == HISTORY_VIEW {
-		setView(g, COMMAND_LINE_VIEW)
+		views[COMMAND_LINE_VIEW].setToCurrentView(g)
 	} else {
-		setView(g, HISTORY_VIEW)
+		views[HISTORY_VIEW].setToCurrentView(g)
 	}
 	return nil
 }
@@ -462,6 +462,7 @@ func layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		v.Editor = &TCBEditor{g, false}
 		views[TITLE_VIEW].updateViewProperties(v)
 		updateTitleView(v, "\u001b[32mTerminal "+"\u001b[29mCall "+"\u001b[29mBuddy")
 	}
@@ -549,6 +550,7 @@ func histLayout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		v.Editor = &TCBEditor{g, false}
 		views[HISTORY_VIEW].updateViewProperties(v)
 	}
 
@@ -557,6 +559,7 @@ func histLayout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		v.Editor = &TCBEditor{g, false}
 		views[RESPONSE_BODY_VIEW].updateViewProperties(v)
 	}
 
@@ -567,6 +570,7 @@ func histLayout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		v.Editor = &TCBEditor{g, false}
 		views[METHOD_BODY_VIEW].updateViewProperties(v)
 		updateMethodBodyView(v, "http://", "get")
 	}
@@ -578,6 +582,7 @@ func histLayout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		v.Editor = &TCBEditor{g, false}
 		views[REQUEST_HEADERS_VIEW].updateViewProperties(v)
 	}
 
@@ -587,6 +592,7 @@ func histLayout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		v.Editor = &TCBEditor{g, false}
 		views[REQUEST_BODY_VIEW].updateViewProperties(v)
 	}
 
@@ -595,6 +601,7 @@ func histLayout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		v.Editor = &TCBEditor{g, false}
 		views[COMMAND_LINE_VIEW].updateViewProperties(v)
 	}
 
@@ -607,7 +614,6 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 }
 
 func setKeybindings(g *gocui.Gui) error {
-
 	// Global Keybindings
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
 		log.Panicln(err)
@@ -648,7 +654,6 @@ func main() {
 	}
 	defer g.Close()
 
-	theEditor = TCBEditor{g, false}
 	g.Highlight = true
 	g.Cursor = true
 	g.SelFgColor = gocui.ColorGreen
@@ -691,7 +696,8 @@ func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
 
 // histOnEnter Populates the history with the currently selected history item
 func histOnEnter(g *gocui.Gui, v *gocui.View) error {
-	defer setView(g, COMMAND_LINE_VIEW)
+	defer views[COMMAND_LINE_VIEW].setToCurrentView(g)
+
 	_, curY := v.Cursor()
 	cmd, err := globalTelephonoState.History.GetNthCommand(curY)
 	if err != nil {
