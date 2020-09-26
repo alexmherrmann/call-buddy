@@ -297,6 +297,11 @@ func switchPrevView(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func setHistView(g *gocui.Gui, v *gocui.View) error {
+	setView(g, HIST_VIEW, HIST_BODY)
+	return nil
+}
+
 func updateMethodBodyView(view *gocui.View, url, method string) {
 	view.Clear()
 
@@ -451,6 +456,9 @@ func main() {
 		log.Panicln(err)
 	}
 	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchNextView); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("", gocui.KeyCtrlY, gocui.ModNone, setHistView); err != nil {
 		log.Panicln(err)
 	}
 
