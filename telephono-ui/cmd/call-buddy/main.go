@@ -169,7 +169,7 @@ func evalCmdLine(g *gocui.Gui) {
 	requestBodyBuffer := rqtBodyView.Buffer()
 
 	// Extract the command into an args list
-	commandStr := cmdLineView.ViewBuffer()
+	commandStr := cmdLineView.Buffer()
 	commandStr = strings.TrimSpace(commandStr)
 	args := strings.Split(commandStr, " ")
 
@@ -181,7 +181,7 @@ func evalCmdLine(g *gocui.Gui) {
 		outfile := args[1]
 		fd, _ := os.Create(outfile)
 		defer fd.Close()
-		fd.WriteString(rspBodyView.ViewBuffer())
+		fd.WriteString(rspBodyView.Buffer())
 	} else if commandStr == "history" {
 		setView(g, HIST_VIEW, HIST_BODY)
 	} else if strings.HasPrefix(strings.ToLower(commandStr), "header ") {
