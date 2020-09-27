@@ -280,6 +280,8 @@ func switchNextView(g *gocui.Gui, v *gocui.View) error {
 	case RSP_BODY:
 		// -> command line
 		setView(g, CMD_LINE_VIEW, CMD_LINE)
+	case HIST_BODY:
+		setView(g, HIST_VIEW, HIST_BODY)
 	default:
 		log.Panicf("Got to a unknown view! %d\n", currView)
 	}
@@ -313,7 +315,12 @@ func switchPrevView(g *gocui.Gui, v *gocui.View) error {
 }
 
 func setHistView(g *gocui.Gui, v *gocui.View) error {
-	setView(g, HIST_VIEW, HIST_BODY)
+	// FIXME: POSSIBLY SWITCH BACK TO LAST SELECTED VIEW?
+	if currView == HIST_BODY {
+		setView(g, CMD_LINE_VIEW, CMD_LINE)
+	} else {
+		setView(g, HIST_VIEW, HIST_BODY)
+	}
 	return nil
 }
 
