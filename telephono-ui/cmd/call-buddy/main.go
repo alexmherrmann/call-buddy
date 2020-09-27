@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -14,6 +13,7 @@ import (
 )
 
 var globalTelephonoState *t.CallBuddyState = nil
+var userEnvironment t.CallBuddyEnvironment = t.CallBuddyEnvironment{t.NewSimpleContributor("User")}
 
 func init() {
 	if f, err := os.OpenFile("tui.log", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755); err != nil {
@@ -35,6 +35,7 @@ func init() {
 				Headers:        t.NewHeadersTemplate(),
 				ExpandableBody: t.NewExpandable("Hello World")}},
 	})
+	globalTelephonoState.Environments = append(globalTelephonoState.Environments, userEnvironment)
 }
 
 func getCurrentRequestTemplate(state *t.CallBuddyState) *t.RequestTemplate {
@@ -118,6 +119,32 @@ func die(msg string) {
 	os.Exit(1)
 }
 
+// saveResponseToFile Save response body to a file
+func saveResponseToFile(contents, filepath string) {
+	fd, _ := os.Create(filepath)
+	defer fd.Close()
+	fd.WriteString(contents)
+}
+
+// appendHeaderToView Adds a key=value header to the header view
+func appendHeaderToView(kv string, requestHeaderView *gocui.View) {
+	if splatted := strings.Split(kv, "="); len(splatted) == 2 {
+		// We want to set a header
+		headers := getCurrentRequestTemplate(globalTelephonoState).Headers
+		headers.Set(splatted[0], splatted[1])
+
+		var expandedHttpHeaders http.Header
+		var expansionErr []error
+		if expandedHttpHeaders, expansionErr = headers.ExpandAllAsHeader(globalTelephonoState.GenerateExpander()); len(expansionErr) != 0 {
+			for _, err := range expansionErr {
+				// TODO AH: Use fancy new wrapped errors using Printf
+				log.Print("Had an error expanding a header: ", err.Error())
+			}
+		}
+		updateRequestHeaderView(requestHeaderView, expandedHttpHeaders)
+	}
+}
+
 // responseToString Creates a "report" of the response
 func responseToString(resp *http.Response) string {
 	body, err := ioutil.ReadAll(resp.Body)
@@ -136,15 +163,8 @@ func responseToString(resp *http.Response) string {
 }
 
 // TODO AH: args should probably get broken out into real parameters
-func call(args []string, body string, headers http.Header) (response *http.Response, err error) {
-	argLen := len(args)
-	if argLen < 2 {
-		// TODO AH: remove content type
-		return nil, errors.New("Invalid Usage: <call-type> <url> [content-type]")
-	}
-
-	methodType := strings.ToLower(args[0])
-	url := args[1]
+func call(methodType, url, body string, headers http.Header) (response *http.Response, err error) {
+	methodType = strings.ToLower(methodType)
 	// TODO AH: Clean up documentation and other places
 	//contentType := "text/plain"
 
@@ -169,39 +189,34 @@ func evalCmdLine(g *gocui.Gui) {
 	requestBodyBuffer := rqtBodyView.Buffer()
 
 	// Extract the command into an args list
-	commandStr := cmdLineView.Buffer()
-	commandStr = strings.TrimSpace(commandStr)
-	args := strings.Split(commandStr, " ")
+	rawCommand := strings.TrimSpace(cmdLineView.Buffer())
+	argv := strings.Split(rawCommand, " ")
+	command := argv[0]
 
-	if strings.HasPrefix(commandStr, ">") {
-		// Save response body to a file
-		if len(args) < 2 {
-			return
+	switch {
+	case strings.HasPrefix(command, ">"):
+		if len(argv) < 2 {
+			break
 		}
-		outfile := args[1]
-		fd, _ := os.Create(outfile)
-		defer fd.Close()
-		fd.WriteString(rspBodyView.Buffer())
-	} else if commandStr == "history" {
+		saveResponseToFile(rspBodyView.Buffer(), argv[1])
+
+	case command == "history":
 		setView(g, HIST_VIEW, HIST_BODY)
-	} else if strings.HasPrefix(strings.ToLower(commandStr), "header ") {
-		strippedString := commandStr[7:]
-		if splatted := strings.Split(strippedString, "="); len(splatted) == 2 {
-			// We want to set a header
-			headers := getCurrentRequestTemplate(globalTelephonoState).Headers
-			headers.Set(splatted[0], splatted[1])
 
-			var expandedHttpHeaders http.Header
-			var expansionErr []error
-			if expandedHttpHeaders, expansionErr = headers.ExpandAllAsHeader(globalTelephonoState.GenerateExpander()); len(expansionErr) != 0 {
-				for _, err := range expansionErr {
-					// TODO AH: Use fancy new wrapped errors using Printf
-					log.Print("Had an error expanding a header: ", err.Error())
-				}
-			}
-			updateRequestHeaderView(rqtHeaderView, expandedHttpHeaders)
+	case command == "header":
+		if len(argv) < 2 {
+			break
 		}
-	} else {
+		appendHeaderToView(argv[1], rqtHeaderView)
+
+	default:
+		// FIXME DG: Split out these calls into individual commands
+		// Assume is a call
+		if len(argv) < 2 {
+			updateResponseBodyView(rspBodyView, "Invalid Usage: <call-type> <url>")
+			break
+		}
+		url := argv[1]
 		headers := getCurrentRequestTemplate(globalTelephonoState).Headers
 
 		var expandedHttpHeaders http.Header
@@ -213,7 +228,7 @@ func evalCmdLine(g *gocui.Gui) {
 			}
 		}
 
-		if response, err = call(args, requestBodyBuffer, expandedHttpHeaders); err != nil {
+		if response, err = call(command, url, requestBodyBuffer, expandedHttpHeaders); err != nil {
 			// Print error out in place of response body
 			updateResponseBodyView(rspBodyView, err.Error())
 			return
