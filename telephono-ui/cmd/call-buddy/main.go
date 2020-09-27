@@ -13,7 +13,7 @@ import (
 )
 
 var globalTelephonoState *t.CallBuddyState = nil
-var userEnvironment t.CallBuddyEnvironment = t.CallBuddyEnvironment{t.NewSimpleContributor("User")}
+var userContributor t.SimpleContributor = t.NewSimpleContributor("User")
 
 func init() {
 	if f, err := os.OpenFile("tui.log", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755); err != nil {
@@ -35,7 +35,7 @@ func init() {
 				Headers:        t.NewHeadersTemplate(),
 				ExpandableBody: t.NewExpandable("Hello World")}},
 	})
-	globalTelephonoState.Environments = append(globalTelephonoState.Environments, userEnvironment)
+	globalTelephonoState.Environments = append(globalTelephonoState.Environments, t.CallBuddyEnvironment{userContributor})
 }
 
 func getCurrentRequestTemplate(state *t.CallBuddyState) *t.RequestTemplate {
@@ -126,23 +126,34 @@ func saveResponseToFile(contents, filepath string) {
 	fd.WriteString(contents)
 }
 
+func addUserEnvironmentVariable(kv string) {
+	var splatted []string
+	if splatted = strings.SplitN(kv, "=", 2); len(splatted) != 2 {
+		return
+	}
+	userContributor.Set(splatted[0], splatted[1])
+}
+
 // appendHeaderToView Adds a key=value header to the header view
 func appendHeaderToView(kv string, requestHeaderView *gocui.View) {
-	if splatted := strings.Split(kv, "="); len(splatted) == 2 {
-		// We want to set a header
-		headers := getCurrentRequestTemplate(globalTelephonoState).Headers
-		headers.Set(splatted[0], splatted[1])
-
-		var expandedHttpHeaders http.Header
-		var expansionErr []error
-		if expandedHttpHeaders, expansionErr = headers.ExpandAllAsHeader(globalTelephonoState.GenerateExpander()); len(expansionErr) != 0 {
-			for _, err := range expansionErr {
-				// TODO AH: Use fancy new wrapped errors using Printf
-				log.Print("Had an error expanding a header: ", err.Error())
-			}
-		}
-		updateRequestHeaderView(requestHeaderView, expandedHttpHeaders)
+	var splatted []string
+	if splatted = strings.SplitN(kv, "=", 2); len(splatted) != 2 {
+		return
 	}
+
+	// We want to set a header
+	headers := getCurrentRequestTemplate(globalTelephonoState).Headers
+	headers.Set(splatted[0], splatted[1])
+
+	var expandedHttpHeaders http.Header
+	var expansionErr []error
+	if expandedHttpHeaders, expansionErr = headers.ExpandAllAsHeader(globalTelephonoState.GenerateExpander()); len(expansionErr) != 0 {
+		for _, err := range expansionErr {
+			// TODO AH: Use fancy new wrapped errors using Printf
+			log.Print("Had an error expanding a header: ", err.Error())
+		}
+	}
+	updateRequestHeaderView(requestHeaderView, expandedHttpHeaders)
 }
 
 // responseToString Creates a "report" of the response
@@ -199,6 +210,14 @@ func evalCmdLine(g *gocui.Gui) {
 			break
 		}
 		saveResponseToFile(rspBodyView.Buffer(), argv[1])
+
+	case command == "env":
+		if len(argv) < 2 {
+			break
+		}
+		for _, kv := range argv[1:] {
+			addUserEnvironmentVariable(kv)
+		}
 
 	case command == "history":
 		setView(g, HIST_VIEW, HIST_BODY)
