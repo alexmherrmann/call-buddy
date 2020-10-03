@@ -43,8 +43,6 @@ func getCurrentRequestTemplate(state *t.CallBuddyState) *t.RequestTemplate {
 	return globalTelephonoState.Collections[0].RequestTemplates[0]
 }
 
-var theEditor TCBEditor
-
 type TCBEditor struct {
 	// This is super dumb that I have to embed this, no way to pass it in...
 	gui               *gocui.Gui
@@ -71,52 +69,88 @@ func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.M
 	// FIXME Dylan: Call the parent gocui.Editor.Edit!
 }
 
-// ViewState Which view is active
-type ViewState int
-
-const (
-	// CMD_LINE The command line view is active
-	CMD_LINE ViewState = iota
-	// MTD_BODY The method body view is active (GET, PUT, HEAD)
-	MTD_BODY
-	// RQT_HEAD The request header view is active
-	RQT_HEAD
-	// RQT_BODY The request body view is active
-	RQT_BODY
-	// HIST_BODY The history body is active
-	HIST_BODY
-	// RSP_BODY The response body view is active
-	RSP_BODY
-	// NO_STATE No state is selected
-	NO_STATE
-)
-const (
-	TTL_LINE_VIEW = "title_view"
-	// CMD_LINE_VIEW The command line view string
-	CMD_LINE_VIEW = "command"
-	// MTD_BODY_VIEW The method body view string
-	MTD_BODY_VIEW = "method_body"
-	// RQT_HEAD_VIEW The request header view string
-	RQT_HEAD_VIEW = "request_head"
-	// RQT_BODY_VIEW The request body view string
-	RQT_BODY_VIEW = "request_body"
-	// RSP_BODY_VIEW The response body view string
-	RSP_BODY_VIEW = "response_body"
-	// HIST_VIEW The history body view string
-	HIST_VIEW = "history_body"
-)
-
-type ioHijacker struct {
-	backupFile *os.File
-	pipe       *os.File
-	channel    chan string
+type viewProperties struct {
+	name       string
+	title      string
+	wrap       bool
+	editable   bool
+	autoscroll bool
 }
 
-var currView ViewState = NO_STATE //needs a better name
+func (properties viewProperties) updateViewProperties(view *gocui.View) {
+	view.Title = properties.title
+	view.Wrap = properties.wrap
+	view.Editable = properties.editable
+	view.Autoscroll = properties.autoscroll
+}
 
-func die(msg string) {
-	os.Stderr.WriteString(msg)
-	os.Exit(1)
+func (properties viewProperties) setToCurrentView(gui *gocui.Gui) {
+	currView, _ := gui.SetCurrentView(properties.name)
+	properties.updateViewProperties(currView)
+	gui.SetViewOnTop(properties.name)
+	gui.Cursor = true
+}
+
+const (
+	TITLE_VIEW           = "title"
+	METHOD_BODY_VIEW     = "method_body"
+	REQUEST_HEADERS_VIEW = "request_headers"
+	REQUEST_BODY_VIEW    = "request_body"
+	COMMAND_LINE_VIEW    = "command_line"
+	HISTORY_VIEW         = "history"
+	RESPONSE_BODY_VIEW   = "response_body"
+)
+
+var views map[string]viewProperties = map[string]viewProperties{
+	TITLE_VIEW: {
+		name:       TITLE_VIEW,
+		title:      "",
+		wrap:       false,
+		editable:   false,
+		autoscroll: false,
+	},
+	METHOD_BODY_VIEW: {
+		name:       METHOD_BODY_VIEW,
+		title:      "Method Body",
+		wrap:       false,
+		editable:   false,
+		autoscroll: false,
+	},
+	REQUEST_HEADERS_VIEW: {
+		name:       REQUEST_HEADERS_VIEW,
+		title:      "Request Headers",
+		wrap:       true,
+		editable:   true,
+		autoscroll: true,
+	},
+	REQUEST_BODY_VIEW: {
+		name:       REQUEST_BODY_VIEW,
+		title:      "Request Body",
+		wrap:       true,
+		editable:   true,
+		autoscroll: true,
+	},
+	COMMAND_LINE_VIEW: {
+		name:       COMMAND_LINE_VIEW,
+		title:      "",
+		wrap:       false,
+		editable:   true,
+		autoscroll: false,
+	},
+	HISTORY_VIEW: {
+		name:       HISTORY_VIEW,
+		title:      "History",
+		wrap:       false,
+		editable:   false,
+		autoscroll: false,
+	},
+	RESPONSE_BODY_VIEW: {
+		name:       RESPONSE_BODY_VIEW,
+		title:      "Response Body",
+		wrap:       true,
+		editable:   true,
+		autoscroll: true,
+	},
 }
 
 // saveResponseToFile Save response body to a file
@@ -190,12 +224,12 @@ func enterHistoryView(g *gocui.Gui) {
 	g.Update(func(gui *gocui.Gui) error {
 		gui.SetManagerFunc(histLayout)
 		gui.Update(func(nGui *gocui.Gui) error {
-			setView(nGui, HIST_VIEW, HIST_BODY)
+			views[HISTORY_VIEW].setToCurrentView(g)
 			return nil
 		})
 		gui.Update(setKeybindings)
 		gui.Update(func(gui *gocui.Gui) error {
-			histView, _ := gui.View(HIST_VIEW)
+			histView, _ := gui.View(HISTORY_VIEW)
 			updateHistoryView(histView)
 			return nil
 		})
@@ -208,7 +242,7 @@ func exitHistoryView(g *gocui.Gui) {
 		gui.SetManagerFunc(layout)
 		return nil
 	})
-	setView(g, CMD_LINE_VIEW, CMD_LINE)
+	views[COMMAND_LINE_VIEW].setToCurrentView(g)
 	g.Update(setKeybindings)
 }
 
@@ -217,14 +251,12 @@ func evalCmdLine(g *gocui.Gui) {
 	var response *http.Response
 
 	// FIXME: Deal with errors!
-	cmdLineView, _ := g.View(CMD_LINE_VIEW)
-	rspBodyView, _ := g.View(RSP_BODY_VIEW)
-	rqtBodyView, err := g.View(RQT_BODY_VIEW)
-	rqtHeaderView, _ := g.View(RQT_HEAD_VIEW)
+	cmdLineView, _ := g.View(COMMAND_LINE_VIEW)
+	rspBodyView, _ := g.View(RESPONSE_BODY_VIEW)
+	rqtBodyView, _ := g.View(REQUEST_BODY_VIEW)
+	rqtHeaderView, _ := g.View(REQUEST_HEADERS_VIEW)
 
 	requestBodyBuffer := rqtBodyView.Buffer()
-
-	log.Print(err)
 
 	// Extract the command into an args list
 	rawCommand := strings.TrimSpace(cmdLineView.Buffer())
@@ -286,89 +318,87 @@ func evalCmdLine(g *gocui.Gui) {
 		updateResponseBodyView(rspBodyView, responseBody)
 
 		// Update the request views
-		methodBodyView, _ := g.View(MTD_BODY_VIEW)
+		methodBodyView, _ := g.View(METHOD_BODY_VIEW)
 		updateMethodBodyView(methodBodyView, response.Request.URL.String(), response.Request.Method)
 
-		requestHeaderView, _ := g.View(RQT_HEAD_VIEW)
+		requestHeaderView, _ := g.View(REQUEST_HEADERS_VIEW)
 		updateRequestHeaderView(requestHeaderView, response.Request.Header)
 
-		// Update the history and history view
+		// Update the history
 		globalTelephonoState.History.AddFinishedCall(response)
-		//updateHistoryView(histView)
 	}
 }
 
-func setView(gui *gocui.Gui, name string, state ViewState) {
-	currView = state
-	currViewPtr, _ := gui.SetCurrentView(name)
-	// FIXME Dylan: This should be done only if the editor is editable
-	currViewPtr.Editor = &theEditor
-	gui.SetViewOnTop(name)
-	gui.Cursor = true
-}
-
-func switchNextView(g *gocui.Gui, v *gocui.View) error {
+func switchNextView(g *gocui.Gui, currView *gocui.View) error {
 	// FIXME: Properly handle errors
 	// Round robben switching between views
-	log.Print(currView)
-	switch currView {
-	case CMD_LINE:
+	if currView == nil {
+		views[COMMAND_LINE_VIEW].setToCurrentView(g)
+		return nil
+	}
+
+	switch currView.Name() {
+	case COMMAND_LINE_VIEW:
 		// -> method body
-		setView(g, MTD_BODY_VIEW, MTD_BODY)
-	case MTD_BODY:
+		views[METHOD_BODY_VIEW].setToCurrentView(g)
+	case METHOD_BODY_VIEW:
 		// -> request headers
-		setView(g, RQT_HEAD_VIEW, RQT_HEAD)
-	case RQT_HEAD:
+		views[REQUEST_HEADERS_VIEW].setToCurrentView(g)
+	case REQUEST_HEADERS_VIEW:
 		// -> request body
-		setView(g, RQT_BODY_VIEW, RQT_BODY)
-	case RQT_BODY:
+		views[REQUEST_BODY_VIEW].setToCurrentView(g)
+	case REQUEST_BODY_VIEW:
 		// -> reqponse body
-		setView(g, RSP_BODY_VIEW, RSP_BODY)
-	case RSP_BODY:
+		views[RESPONSE_BODY_VIEW].setToCurrentView(g)
+	case RESPONSE_BODY_VIEW:
 		// -> command line
-		setView(g, CMD_LINE_VIEW, CMD_LINE)
-	case HIST_BODY:
+		views[COMMAND_LINE_VIEW].setToCurrentView(g)
+	case HISTORY_VIEW:
 		exitHistoryView(g)
 	default:
-		log.Panicf("Got to a unknown view! %d\n", currView)
+		log.Panicf("Got to a unknown view! %s\n", currView.Name())
 	}
 	return nil
 }
 
-func switchPrevView(g *gocui.Gui, v *gocui.View) error {
+func switchPrevView(g *gocui.Gui, currView *gocui.View) error {
 	// FIXME: Properly handle errors
-
 	// Round robben switching between views
-	switch currView {
-	case CMD_LINE:
-		// -> method body
-		setView(g, RSP_BODY_VIEW, RSP_BODY)
-	case MTD_BODY:
-		// -> request headers
-		setView(g, CMD_LINE_VIEW, CMD_LINE)
-	case RQT_HEAD:
-		// -> request body
-		setView(g, MTD_BODY_VIEW, MTD_BODY)
-	case RQT_BODY:
-		// -> reqponse body
-		setView(g, RQT_HEAD_VIEW, RQT_HEAD)
-	case RSP_BODY:
+	if currView == nil {
+		views[COMMAND_LINE_VIEW].setToCurrentView(g)
+		return nil
+	}
+
+	switch currView.Name() {
+	case COMMAND_LINE_VIEW:
+		// -> response body
+		views[RESPONSE_BODY_VIEW].setToCurrentView(g)
+	case METHOD_BODY_VIEW:
 		// -> command line
-		setView(g, RQT_BODY_VIEW, RQT_BODY)
-	case HIST_BODY:
+		views[COMMAND_LINE_VIEW].setToCurrentView(g)
+	case REQUEST_HEADERS_VIEW:
+		// -> method body
+		views[METHOD_BODY_VIEW].setToCurrentView(g)
+	case REQUEST_BODY_VIEW:
+		// -> request header
+		views[REQUEST_HEADERS_VIEW].setToCurrentView(g)
+	case RESPONSE_BODY_VIEW:
+		// -> request body
+		views[REQUEST_BODY_VIEW].setToCurrentView(g)
+	case HISTORY_VIEW:
 		exitHistoryView(g)
 	default:
-		log.Panicf("Got to a unknown view! %d\n", currView)
+		log.Panicf("Got to a unknown view! %s\n", currView.Name())
 	}
 	return nil
 }
 
 func setHistView(g *gocui.Gui, v *gocui.View) error {
-	// FIXME: POSSIBLY SWITCH BACK TO LAST SELECTED VIEW?
-	if currView == HIST_BODY {
-		setView(g, CMD_LINE_VIEW, CMD_LINE)
+	// FIXME CP: POSSIBLY SWITCH BACK TO LAST SELECTED VIEW?
+	if v.Name() == HISTORY_VIEW {
+		views[COMMAND_LINE_VIEW].setToCurrentView(g)
 	} else {
-		setView(g, HIST_VIEW, HIST_BODY)
+		views[HISTORY_VIEW].setToCurrentView(g)
 	}
 	return nil
 }
@@ -413,6 +443,11 @@ func updateHistoryView(view *gocui.View) {
 	fmt.Fprint(view, histFormat)
 }
 
+func updateTitleView(view *gocui.View, title string) {
+	view.Clear()
+	fmt.Fprint(view, title)
+}
+
 //Setting the manager
 func layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
@@ -423,15 +458,17 @@ func layout(g *gocui.Gui) error {
 	// Call-Buddy Title
 	titleYStart := 0
 	titleYEnd := titleYStart + 2
-	if v, err := g.SetView(TTL_LINE_VIEW, 0, titleYStart, verticalSplitX, titleYEnd); err != nil {
+	if v, err := g.SetView(TITLE_VIEW, 0, titleYStart, verticalSplitX, titleYEnd); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		fmt.Fprint(v, "\u001b[32mTerminal "+"\u001b[29mCall "+"\u001b[29mBuddy")
+		v.Editor = &TCBEditor{g, false}
+		views[TITLE_VIEW].updateViewProperties(v)
+		updateTitleView(v, "\u001b[32mTerminal "+"\u001b[29mCall "+"\u001b[29mBuddy")
 	}
 
 	// Response Body (e.g. html)
-	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, titleYStart, realMaxX, horizontalSplitY); err != nil {
+	if v, err := g.SetView(RESPONSE_BODY_VIEW, verticalSplitX+1, titleYStart, realMaxX, horizontalSplitY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -444,7 +481,7 @@ func layout(g *gocui.Gui) error {
 	// Method Body (e.g. GET, PUT, HEAD...)
 	methodBodyYStart := titleYEnd + 1
 	methodBodyYEnd := methodBodyYStart + 10
-	if v, err := g.SetView(MTD_BODY_VIEW, 0, methodBodyYStart, verticalSplitX, methodBodyYEnd); err != nil {
+	if v, err := g.SetView(METHOD_BODY_VIEW, 0, methodBodyYStart, verticalSplitX, methodBodyYEnd); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -455,7 +492,7 @@ func layout(g *gocui.Gui) error {
 	// Request Headers (e.g. Content-type: text/json)
 	requestHeadersYStart := methodBodyYEnd + 1
 	requestHeadersYEnd := requestHeadersYStart + 6
-	if v, err := g.SetView(RQT_HEAD_VIEW, 0, requestHeadersYStart, verticalSplitX, requestHeadersYEnd); err != nil {
+	if v, err := g.SetView(REQUEST_HEADERS_VIEW, 0, requestHeadersYStart, verticalSplitX, requestHeadersYEnd); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -467,7 +504,7 @@ func layout(g *gocui.Gui) error {
 
 	// Request Body (e.g. json: {})
 	requestBodyYStart := requestHeadersYEnd + 1
-	if v, err := g.SetView(RQT_BODY_VIEW, 0, requestBodyYStart, verticalSplitX, horizontalSplitY); err != nil {
+	if v, err := g.SetView(REQUEST_BODY_VIEW, 0, requestBodyYStart, verticalSplitX, horizontalSplitY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -478,7 +515,7 @@ func layout(g *gocui.Gui) error {
 	}
 
 	// Command Line (e.g. :get http://httpbin.org/get)
-	if v, err := g.SetView(CMD_LINE_VIEW, 0, horizontalSplitY+1, realMaxX, realMaxY); err != nil {
+	if v, err := g.SetView(COMMAND_LINE_VIEW, 0, horizontalSplitY+1, realMaxX, realMaxY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -500,7 +537,7 @@ func histLayout(g *gocui.Gui) error {
 	// Call-Buddy Title
 	titleYStart := 0
 	titleYEnd := titleYStart + 2
-	if v, err := g.SetView(TTL_LINE_VIEW, 0, titleYStart, verticalSplitX, titleYEnd); err != nil {
+	if v, err := g.SetView(TITLE_VIEW, 0, titleYStart, verticalSplitX, titleYEnd); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -508,72 +545,64 @@ func histLayout(g *gocui.Gui) error {
 	}
 
 	historyYEnd := titleYStart + 6
-	//History View
-	if v, err := g.SetView(HIST_VIEW, verticalSplitX+1, titleYStart, realMaxX, historyYEnd); err != nil {
+	// History View
+	if v, err := g.SetView(HISTORY_VIEW, verticalSplitX+1, titleYStart, realMaxX, historyYEnd); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "History"
-		v.Wrap = false
-		v.Editable = false
-		v.Autoscroll = false
+		v.Editor = &TCBEditor{g, false}
+		views[HISTORY_VIEW].updateViewProperties(v)
 	}
 
 	// Response Body (e.g. html)
-	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, historyYEnd+1, realMaxX, horizontalSplitY); err != nil {
+	if v, err := g.SetView(RESPONSE_BODY_VIEW, verticalSplitX+1, historyYEnd+1, realMaxX, horizontalSplitY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Response Body"
-		v.Wrap = true
-		v.Autoscroll = true
-		v.Editable = true
+		v.Editor = &TCBEditor{g, false}
+		views[RESPONSE_BODY_VIEW].updateViewProperties(v)
 	}
 
 	// Method Body (e.g. GET, PUT, HEAD...)
 	methodBodyYStart := titleYEnd + 1
 	methodBodyYEnd := methodBodyYStart + 10
-	if v, err := g.SetView(MTD_BODY_VIEW, 0, methodBodyYStart, verticalSplitX, methodBodyYEnd); err != nil {
+	if v, err := g.SetView(METHOD_BODY_VIEW, 0, methodBodyYStart, verticalSplitX, methodBodyYEnd); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Method Body"
+		v.Editor = &TCBEditor{g, false}
+		views[METHOD_BODY_VIEW].updateViewProperties(v)
 		updateMethodBodyView(v, "http://", "get")
 	}
 
 	// Request Headers (e.g. Content-type: text/json)
 	requestHeadersYStart := methodBodyYEnd + 1
 	requestHeadersYEnd := requestHeadersYStart + 6
-	if v, err := g.SetView(RQT_HEAD_VIEW, 0, requestHeadersYStart, verticalSplitX, requestHeadersYEnd); err != nil {
+	if v, err := g.SetView(REQUEST_HEADERS_VIEW, 0, requestHeadersYStart, verticalSplitX, requestHeadersYEnd); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Request Headers"
-		v.Wrap = true
-		v.Autoscroll = true
-		v.Editable = true
+		v.Editor = &TCBEditor{g, false}
+		views[REQUEST_HEADERS_VIEW].updateViewProperties(v)
 	}
 
 	// Request Body (e.g. json: {})
 	requestBodyYStart := requestHeadersYEnd + 1
-	if v, err := g.SetView(RQT_BODY_VIEW, 0, requestBodyYStart, verticalSplitX, horizontalSplitY); err != nil {
+	if v, err := g.SetView(REQUEST_BODY_VIEW, 0, requestBodyYStart, verticalSplitX, horizontalSplitY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Title = "Request Body"
-		v.Wrap = true
-		v.Autoscroll = true
-		v.Editable = true
+		v.Editor = &TCBEditor{g, false}
+		views[REQUEST_BODY_VIEW].updateViewProperties(v)
 	}
 
 	// Command Line (e.g. :get http://httpbin.org/get)
-	if v, err := g.SetView(CMD_LINE_VIEW, 0, horizontalSplitY+1, realMaxX, realMaxY); err != nil {
+	if v, err := g.SetView(COMMAND_LINE_VIEW, 0, horizontalSplitY+1, realMaxX, realMaxY); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		v.Wrap = false
-		v.Editable = true
-		v.Autoscroll = false
+		v.Editor = &TCBEditor{g, false}
+		views[COMMAND_LINE_VIEW].updateViewProperties(v)
 	}
 
 	return nil
@@ -585,7 +614,6 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 }
 
 func setKeybindings(g *gocui.Gui) error {
-
 	// Global Keybindings
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
 		log.Panicln(err)
@@ -600,21 +628,20 @@ func setKeybindings(g *gocui.Gui) error {
 	// View-Specific Keybindings:
 
 	// Command View Keybindings
-	if err := g.SetKeybinding(CMD_LINE_VIEW, gocui.KeyEnter, gocui.ModNone, cmdOnEnter); err != nil {
+	if err := g.SetKeybinding(COMMAND_LINE_VIEW, gocui.KeyEnter, gocui.ModNone, cmdOnEnter); err != nil {
 		log.Panicln(err)
 	}
 
 	// History View Keybindings
-	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyArrowDown, gocui.ModNone, histArrowDown); err != nil {
+	if err := g.SetKeybinding(HISTORY_VIEW, gocui.KeyArrowDown, gocui.ModNone, histArrowDown); err != nil {
 		log.Panicln(err)
 	}
-	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyArrowUp, gocui.ModNone, histArrowUp); err != nil {
+	if err := g.SetKeybinding(HISTORY_VIEW, gocui.KeyArrowUp, gocui.ModNone, histArrowUp); err != nil {
 		log.Panicln(err)
 	}
-	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyEnter, gocui.ModNone, histOnEnter); err != nil {
+	if err := g.SetKeybinding(HISTORY_VIEW, gocui.KeyEnter, gocui.ModNone, histOnEnter); err != nil {
 		log.Panicln(err)
 	}
-
 	return nil
 
 }
@@ -627,7 +654,6 @@ func main() {
 	}
 	defer g.Close()
 
-	theEditor = TCBEditor{g, false}
 	g.Highlight = true
 	g.Cursor = true
 	g.SelFgColor = gocui.ColorGreen
@@ -637,8 +663,7 @@ func main() {
 
 	setKeybindings(g)
 
-	currView = CMD_LINE
-	g.SetCurrentView(CMD_LINE_VIEW)
+	g.SetCurrentView(COMMAND_LINE_VIEW)
 
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 		log.Panicln(err)
@@ -671,14 +696,15 @@ func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
 
 // histOnEnter Populates the history with the currently selected history item
 func histOnEnter(g *gocui.Gui, v *gocui.View) error {
-	defer setView(g, CMD_LINE_VIEW, CMD_LINE)
+	defer views[COMMAND_LINE_VIEW].setToCurrentView(g)
+
 	_, curY := v.Cursor()
 	cmd, err := globalTelephonoState.History.GetNthCommand(curY)
 	if err != nil {
 		log.Fatalf("pos: %d\n", curY)
 		return err
 	}
-	cmdView, _ := g.View(CMD_LINE_VIEW)
+	cmdView, _ := g.View(COMMAND_LINE_VIEW)
 	cmdView.Clear()
 	fmt.Fprint(cmdView, cmd)
 	cmdView.SetCursor(len(cmd), 0)
