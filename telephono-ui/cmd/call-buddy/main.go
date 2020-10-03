@@ -186,6 +186,27 @@ func call(methodType, url, body string, headers http.Header) (response *http.Res
 	return theTemplate.ExecuteWithClientAndExpander(http.DefaultClient, globalTelephonoState.GenerateExpander())
 }
 
+func enterHistoryView(g *gocui.Gui) {
+	g.Update(func(gui *gocui.Gui) error {
+		gui.SetManagerFunc(histLayout)
+		gui.Update(func(nGui *gocui.Gui) error {
+			setView(nGui, HIST_VIEW, HIST_BODY)
+			return nil
+		})
+		gui.Update(setKeybindings)
+		return nil
+	})
+}
+
+func exitHistoryView(g *gocui.Gui) {
+	g.Update(func(gui *gocui.Gui) error {
+		gui.SetManagerFunc(layout)
+		return nil
+	})
+	setView(g, CMD_LINE_VIEW, CMD_LINE)
+	g.Update(setKeybindings)
+}
+
 func evalCmdLine(g *gocui.Gui) {
 	var err error
 	var response *http.Response
@@ -222,11 +243,7 @@ func evalCmdLine(g *gocui.Gui) {
 		}
 
 	case command == "history":
-		//setView(g, HIST_VIEW, HIST_BODY)
-		g.Update(func(gui *gocui.Gui) error {
-			gui.SetManagerFunc(histLayout)
-			return nil
-		})
+		enterHistoryView(g)
 
 	case command == "header":
 		if len(argv) < 2 {
@@ -289,6 +306,7 @@ func setView(gui *gocui.Gui, name string, state ViewState) {
 func switchNextView(g *gocui.Gui, v *gocui.View) error {
 	// FIXME: Properly handle errors
 	// Round robben switching between views
+	log.Print(currView)
 	switch currView {
 	case CMD_LINE:
 		// -> method body
@@ -306,7 +324,7 @@ func switchNextView(g *gocui.Gui, v *gocui.View) error {
 		// -> command line
 		setView(g, CMD_LINE_VIEW, CMD_LINE)
 	case HIST_BODY:
-		setView(g, HIST_VIEW, HIST_BODY)
+		exitHistoryView(g)
 	default:
 		log.Panicf("Got to a unknown view! %d\n", currView)
 	}
@@ -333,6 +351,8 @@ func switchPrevView(g *gocui.Gui, v *gocui.View) error {
 	case RSP_BODY:
 		// -> command line
 		setView(g, RQT_BODY_VIEW, RQT_BODY)
+	case HIST_BODY:
+		exitHistoryView(g)
 	default:
 		log.Panicf("Got to a unknown view! %d\n", currView)
 	}
@@ -463,7 +483,7 @@ func layout(g *gocui.Gui) error {
 		v.Autoscroll = false
 	}
 
-	setKeybindings(g)
+	//setKeybindings(g)
 
 	return nil
 }
@@ -554,7 +574,7 @@ func histLayout(g *gocui.Gui) error {
 		v.Autoscroll = false
 	}
 
-	setKeybindings(g)
+	//setKeybindings(g)
 
 	return nil
 }
@@ -564,7 +584,7 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
 
-func setKeybindings(g *gocui.Gui) {
+func setKeybindings(g *gocui.Gui) error {
 
 	// Global Keybindings
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
@@ -595,6 +615,8 @@ func setKeybindings(g *gocui.Gui) {
 		log.Panicln(err)
 	}
 
+	return nil
+
 }
 
 func main() {
@@ -612,6 +634,8 @@ func main() {
 
 	//Setting a manager, sets the view (defined as another function above)
 	g.SetManagerFunc(layout)
+
+	setKeybindings(g)
 
 	currView = CMD_LINE
 	g.SetCurrentView(CMD_LINE_VIEW)
