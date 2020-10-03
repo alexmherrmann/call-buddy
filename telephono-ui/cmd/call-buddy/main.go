@@ -193,11 +193,13 @@ func evalCmdLine(g *gocui.Gui) {
 	// FIXME: Deal with errors!
 	cmdLineView, _ := g.View(CMD_LINE_VIEW)
 	rspBodyView, _ := g.View(RSP_BODY_VIEW)
-	rqtBodyView, _ := g.View(RQT_BODY_VIEW)
+	rqtBodyView, err := g.View(RQT_BODY_VIEW)
 	rqtHeaderView, _ := g.View(RQT_HEAD_VIEW)
 	histView, _ := g.View(HIST_VIEW)
 
 	requestBodyBuffer := rqtBodyView.Buffer()
+
+	log.Print(err)
 
 	// Extract the command into an args list
 	rawCommand := strings.TrimSpace(cmdLineView.Buffer())
@@ -220,7 +222,11 @@ func evalCmdLine(g *gocui.Gui) {
 		}
 
 	case command == "history":
-		setView(g, HIST_VIEW, HIST_BODY)
+		//setView(g, HIST_VIEW, HIST_BODY)
+		g.Update(func(gui *gocui.Gui) error {
+			gui.SetManagerFunc(histLayout)
+			return nil
+		})
 
 	case command == "header":
 		if len(argv) < 2 {
@@ -400,6 +406,85 @@ func layout(g *gocui.Gui) error {
 		fmt.Fprint(v, "\u001b[32mTerminal "+"\u001b[29mCall "+"\u001b[29mBuddy")
 	}
 
+	// Response Body (e.g. html)
+	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, titleYStart, realMaxX, horizontalSplitY); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "Response Body"
+		v.Wrap = true
+		v.Autoscroll = true
+		v.Editable = true
+	}
+
+	// Method Body (e.g. GET, PUT, HEAD...)
+	methodBodyYStart := titleYEnd + 1
+	methodBodyYEnd := methodBodyYStart + 10
+	if v, err := g.SetView(MTD_BODY_VIEW, 0, methodBodyYStart, verticalSplitX, methodBodyYEnd); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "Method Body"
+		updateMethodBodyView(v, "http://", "get")
+	}
+
+	// Request Headers (e.g. Content-type: text/json)
+	requestHeadersYStart := methodBodyYEnd + 1
+	requestHeadersYEnd := requestHeadersYStart + 6
+	if v, err := g.SetView(RQT_HEAD_VIEW, 0, requestHeadersYStart, verticalSplitX, requestHeadersYEnd); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "Request Headers"
+		v.Wrap = true
+		v.Autoscroll = true
+		v.Editable = true
+	}
+
+	// Request Body (e.g. json: {})
+	requestBodyYStart := requestHeadersYEnd + 1
+	if v, err := g.SetView(RQT_BODY_VIEW, 0, requestBodyYStart, verticalSplitX, horizontalSplitY); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "Request Body"
+		v.Wrap = true
+		v.Autoscroll = true
+		v.Editable = true
+	}
+
+	// Command Line (e.g. :get http://httpbin.org/get)
+	if v, err := g.SetView(CMD_LINE_VIEW, 0, horizontalSplitY+1, realMaxX, realMaxY); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Wrap = false
+		v.Editable = true
+		v.Autoscroll = false
+	}
+
+	setKeybindings(g)
+
+	return nil
+}
+
+//Possible layout for when history is popped up.
+func histLayout(g *gocui.Gui) error {
+	maxX, maxY := g.Size()
+	realMaxX, realMaxY := maxX-1, maxY-1
+	verticalSplitX := 50         // Defines the vertical split down to the command line
+	horizontalSplitY := maxY - 4 // Defines the horizontal command line split
+
+	// Call-Buddy Title
+	titleYStart := 0
+	titleYEnd := titleYStart + 2
+	if v, err := g.SetView(TTL_LINE_VIEW, 0, titleYStart, verticalSplitX, titleYEnd); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		fmt.Fprint(v, "\u001b[32mTerminal "+"\u001b[29mCall "+"\u001b[29mBuddy")
+	}
+
 	historyYEnd := titleYStart + 6
 	//History View
 	if v, err := g.SetView(HIST_VIEW, verticalSplitX+1, titleYStart, realMaxX, historyYEnd); err != nil {
@@ -468,6 +553,9 @@ func layout(g *gocui.Gui) error {
 		v.Editable = true
 		v.Autoscroll = false
 	}
+
+	setKeybindings(g)
+
 	return nil
 }
 
@@ -476,21 +564,7 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
 
-func main() {
-	//Setting up a new TUI
-	g, err := gocui.NewGui(gocui.OutputNormal)
-	if err != nil {
-		log.Panicln(err)
-	}
-	defer g.Close()
-
-	theEditor = TCBEditor{g, false}
-	g.Highlight = true
-	g.Cursor = true
-	g.SelFgColor = gocui.ColorGreen
-
-	//Setting a manager, sets the view (defined as another function above)
-	g.SetManagerFunc(layout)
+func setKeybindings(g *gocui.Gui) {
 
 	// Global Keybindings
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
@@ -520,6 +594,24 @@ func main() {
 	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyEnter, gocui.ModNone, histOnEnter); err != nil {
 		log.Panicln(err)
 	}
+
+}
+
+func main() {
+	//Setting up a new TUI
+	g, err := gocui.NewGui(gocui.OutputNormal)
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer g.Close()
+
+	theEditor = TCBEditor{g, false}
+	g.Highlight = true
+	g.Cursor = true
+	g.SelFgColor = gocui.ColorGreen
+
+	//Setting a manager, sets the view (defined as another function above)
+	g.SetManagerFunc(layout)
 
 	currView = CMD_LINE
 	g.SetCurrentView(CMD_LINE_VIEW)
