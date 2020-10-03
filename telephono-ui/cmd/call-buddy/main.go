@@ -194,6 +194,11 @@ func enterHistoryView(g *gocui.Gui) {
 			return nil
 		})
 		gui.Update(setKeybindings)
+		gui.Update(func(gui *gocui.Gui) error {
+			histView, _ := gui.View(HIST_VIEW)
+			updateHistoryView(histView)
+			return nil
+		})
 		return nil
 	})
 }
@@ -216,7 +221,6 @@ func evalCmdLine(g *gocui.Gui) {
 	rspBodyView, _ := g.View(RSP_BODY_VIEW)
 	rqtBodyView, err := g.View(RQT_BODY_VIEW)
 	rqtHeaderView, _ := g.View(RQT_HEAD_VIEW)
-	histView, _ := g.View(HIST_VIEW)
 
 	requestBodyBuffer := rqtBodyView.Buffer()
 
@@ -290,7 +294,7 @@ func evalCmdLine(g *gocui.Gui) {
 
 		// Update the history and history view
 		globalTelephonoState.History.AddFinishedCall(response)
-		updateHistoryView(histView)
+		//updateHistoryView(histView)
 	}
 }
 
@@ -483,8 +487,6 @@ func layout(g *gocui.Gui) error {
 		v.Autoscroll = false
 	}
 
-	//setKeybindings(g)
-
 	return nil
 }
 
@@ -573,8 +575,6 @@ func histLayout(g *gocui.Gui) error {
 		v.Editable = true
 		v.Autoscroll = false
 	}
-
-	//setKeybindings(g)
 
 	return nil
 }
