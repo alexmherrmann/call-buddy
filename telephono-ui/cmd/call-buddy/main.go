@@ -675,8 +675,7 @@ func histOnEnter(g *gocui.Gui, v *gocui.View) error {
 	_, curY := v.Cursor()
 	cmd, err := globalTelephonoState.History.GetNthCommand(curY)
 	if err != nil {
-		log.Fatalf("pos: %d\n", curY)
-		return err
+		cmd = ""
 	}
 	cmdView, _ := g.View(CMD_LINE_VIEW)
 	cmdView.Clear()
