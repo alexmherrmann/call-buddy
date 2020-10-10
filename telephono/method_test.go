@@ -13,7 +13,7 @@ func TestHttpMethodAsString(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.shouldbe, func(t *testing.T) {
-			if test.method.asMethodString() != test.shouldbe {
+			if test.method.String() != test.shouldbe {
 				t.Error("asString Method didn't return correctly")
 			}
 		})

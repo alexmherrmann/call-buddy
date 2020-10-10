@@ -2,7 +2,9 @@ package telephono
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strings"
 )
 
 //here is a test comment to make sure i am editing and commiting correctly - coop diddy
@@ -17,8 +19,29 @@ const (
 	Head              = "HEAD"
 )
 
-func (m HttpMethod) asMethodString() string {
+func AllHttpMethods() []HttpMethod {
+	return []HttpMethod{Post, Get, Put, Delete, Head}
+}
+
+func (m HttpMethod) String() string {
 	return string(m)
+}
+
+func toHttpMethod(method string) (HttpMethod, error) {
+	methodUpper := strings.ToUpper(method)
+	switch methodUpper {
+	case "POST":
+		return Post, nil
+	case "GET":
+		return Get, nil
+	case "PUT":
+		return Put, nil
+	case "DELETE":
+		return Delete, nil
+	case "HEAD":
+		return Head, nil
+	}
+	return "", errors.New("No such HTTP method " + method)
 }
 
 type expandable interface {

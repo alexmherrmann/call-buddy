@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -156,25 +155,8 @@ func appendHeaderToView(kv string, requestHeaderView *gocui.View) {
 	updateRequestHeaderView(requestHeaderView, expandedHttpHeaders)
 }
 
-// responseToString Creates a "report" of the response
-func responseToString(resp *http.Response) string {
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err.Error()
-	}
-	var rspBodyStr string
-	if len(resp.Header) > 1 {
-		for key, value := range resp.Header {
-			rspBodyStr += fmt.Sprintf("%s: %s\n", key, strings.Trim(strings.Join(value, " "), "[]"))
-		}
-		rspBodyStr += "\n"
-	}
-	rspBodyStr += string(body)
-	return rspBodyStr
-}
-
 // TODO AH: args should probably get broken out into real parameters
-func call(methodType, url, body string, headers http.Header) (response *http.Response, err error) {
+func call(methodType, url, body string, headers http.Header) (t.HistoricalCall, error) {
 	methodType = strings.ToLower(methodType)
 	// TODO AH: Clean up documentation and other places
 	//contentType := "text/plain"
@@ -213,8 +195,8 @@ func exitHistoryView(g *gocui.Gui) {
 }
 
 func evalCmdLine(g *gocui.Gui) {
+	var historicalCall t.HistoricalCall
 	var err error
-	var response *http.Response
 
 	// FIXME: Deal with errors!
 	cmdLineView, _ := g.View(CMD_LINE_VIEW)
@@ -274,26 +256,23 @@ func evalCmdLine(g *gocui.Gui) {
 			}
 		}
 
-		if response, err = call(command, url, requestBodyBuffer, expandedHttpHeaders); err != nil {
+		if historicalCall, err = call(command, url, requestBodyBuffer, expandedHttpHeaders); err != nil {
 			// Print error out in place of response body
 			updateResponseBodyView(rspBodyView, err.Error())
 			return
 		}
-		defer response.Body.Close()
-
 		// Print out new response
-		responseBody := responseToString(response)
-		updateResponseBodyView(rspBodyView, responseBody)
+		updateResponseBodyView(rspBodyView, historicalCall.Response.String())
 
 		// Update the request views
 		methodBodyView, _ := g.View(MTD_BODY_VIEW)
-		updateMethodBodyView(methodBodyView, response.Request.URL.String(), response.Request.Method)
+		updateMethodBodyView(methodBodyView, historicalCall.Request.URL, historicalCall.Request.Method)
 
 		requestHeaderView, _ := g.View(RQT_HEAD_VIEW)
-		updateRequestHeaderView(requestHeaderView, response.Request.Header)
+		updateRequestHeaderView(requestHeaderView, historicalCall.Request.Header)
 
 		// Update the history and history view
-		globalTelephonoState.History.AddFinishedCall(response)
+		globalTelephonoState.History.AddFinishedCall(historicalCall)
 		//updateHistoryView(histView)
 	}
 }
@@ -373,18 +352,17 @@ func setHistView(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func updateMethodBodyView(view *gocui.View, url, method string) {
+func updateMethodBodyView(view *gocui.View, url string, method t.HttpMethod) {
 	view.Clear()
 
 	fmt.Fprintln(view, url)
 	fmt.Fprintln(view)
-	allMethods := []string{"get", "post", "head", "put", "delete", "options"}
-	for _, possibleMethod := range allMethods {
+	for _, possibleMethod := range t.AllHttpMethods() {
 		x := " "
-		if possibleMethod == strings.ToLower(method) {
+		if possibleMethod == method {
 			x = "x"
 		}
-		fmt.Fprintf(view, "[%s] %s\n", x, strings.ToUpper(possibleMethod))
+		fmt.Fprintf(view, "[%s] %s\n", x, possibleMethod.String())
 	}
 }
 

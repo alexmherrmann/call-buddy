@@ -7,8 +7,6 @@ import (
 
 type Body BasicExpandable
 
-type CallResponse *http.Response
-
 type RequestTemplate struct {
 	Method         HttpMethod
 	Url            *BasicExpandable
@@ -18,11 +16,11 @@ type RequestTemplate struct {
 }
 
 //executeWithClientAndExpander will execute this call template with the specified client and expander, returning a response or an error
-func (r *RequestTemplate) ExecuteWithClientAndExpander(client *http.Client, expander Expander) (CallResponse, error) {
+func (r *RequestTemplate) ExecuteWithClientAndExpander(client *http.Client, expander Expander) (HistoricalCall, error) {
 	//expand the url
 	expandedUrl, urlErr := r.Url.Expand(expander)
 	if urlErr != nil {
-		return nil, urlErr
+		return HistoricalCall{}, urlErr
 	}
 
 	//expand the body
@@ -30,22 +28,32 @@ func (r *RequestTemplate) ExecuteWithClientAndExpander(client *http.Client, expa
 	//OPTIMIZE AH: Instead of just expanding this, stream it so that we're not loading so many things into memory
 	expandedBody, bodyErr := r.ExpandableBody.Expand(expander)
 	if bodyErr != nil {
-		return nil, bodyErr
+		return HistoricalCall{}, bodyErr
 	}
 
 	bodyReader := strings.NewReader(expandedBody)
-
-	toExecute, newCallErr := http.NewRequestWithContext(globalState.callContext, r.Method.asMethodString(), expandedUrl, bodyReader)
+	httpRequest, newCallErr := http.NewRequestWithContext(globalState.callContext, string(r.Method), expandedUrl, bodyReader)
 	if newCallErr != nil {
-		return nil, newCallErr
+		return HistoricalCall{}, newCallErr
 	}
 
-	// add the headers
+	// This must be done before we do our call since the call consumes the body
+	request := Request{}
+	request.Populate(httpRequest)
+
+	// Add the headers
 	if header, errors := r.Headers.ExpandAllAsHeader(expander); len(errors) == 0 {
-		toExecute.Header = header
+		httpRequest.Header = header
 	}
 
-	response, err := client.Do(toExecute)
+	httpResponse, doErr := client.Do(httpRequest)
+	if doErr != nil {
+		return HistoricalCall{}, doErr
+	}
 
-	return response, err
+	response := Response{}
+	response.Populate(httpResponse)
+
+	call := HistoricalCall{Request: request, Response: response}
+	return call, nil
 }
