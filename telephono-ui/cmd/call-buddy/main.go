@@ -35,6 +35,10 @@ func init() {
 				ExpandableBody: t.NewExpandable("Hello World")}},
 	})
 	globalTelephonoState.Environments = append(globalTelephonoState.Environments, t.CallBuddyEnvironment{userContributor})
+
+	stateFilepath := "state.json"
+	log.Printf("Loading state from %s\n", stateFilepath)
+	globalTelephonoState.Load(stateFilepath)
 }
 
 func getCurrentRequestTemplate(state *t.CallBuddyState) *t.RequestTemplate {
@@ -389,6 +393,7 @@ func updateHistoryView(view *gocui.View) {
 	view.Clear()
 	histFormat := globalTelephonoState.History.GetSimpleWholeHistoryReport()
 	fmt.Fprint(view, histFormat)
+	globalTelephonoState.Save("state.json")
 }
 
 //Setting the manager
