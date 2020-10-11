@@ -59,17 +59,11 @@ func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.M
 		return
 	}
 
-	switch {
-	case ch != 0 && mod == 0:
-		v.EditWrite(ch)
-	case key == gocui.KeySpace:
-		v.EditWrite(' ')
-	case key == gocui.KeyBackspace || key == gocui.KeyBackspace2:
-		v.EditDelete(true)
-	case ch == '[' && mod == gocui.ModAlt:
+	if ch == '[' && mod == gocui.ModAlt {
 		editor.expectKeyModifier = true
+		return
 	}
-	// FIXME Dylan: Call the parent gocui.Editor.Edit!
+	gocui.DefaultEditor.Edit(v, key, ch, mod)
 }
 
 // ViewState Which view is active
