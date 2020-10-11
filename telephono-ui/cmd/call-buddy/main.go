@@ -229,6 +229,7 @@ func evalCmdLine(g *gocui.Gui) {
 		for _, kv := range argv[1:] {
 			addUserEnvironmentVariable(kv)
 		}
+		updateCommandLineView(cmdLineView, "")
 
 	case command == "history":
 		enterHistoryView(g)
@@ -751,7 +752,6 @@ func histOnEnter(g *gocui.Gui, v *gocui.View) error {
 	}
 	cmd = generateCommand(historicalCall)
 	cmdView, _ := g.View(CMD_LINE_VIEW)
-	cmdView.Clear()
 	updateCommandLineView(cmdView, cmd)
 	return nil
 }
