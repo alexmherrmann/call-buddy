@@ -16,12 +16,12 @@ type (
 	}
 
 	CallBuddyHistory struct {
-		callsFromCurrentSession []HistoricalCall
+		CallsFromCurrentSession []HistoricalCall
 	}
 )
 
 func (wholeHistory *CallBuddyHistory) AddFinishedCall(call HistoricalCall) {
-	wholeHistory.callsFromCurrentSession = append(wholeHistory.callsFromCurrentSession, call)
+	wholeHistory.CallsFromCurrentSession = append(wholeHistory.CallsFromCurrentSession, call)
 }
 
 // GetSimpleReport generates simple string report that gives info about the request/response
@@ -35,7 +35,7 @@ func (theCall HistoricalCall) GetSimpleReport() string {
 func (wholeHistory *CallBuddyHistory) GetSimpleWholeHistoryReport() string {
 	buffer := strings.Builder{}
 
-	for _, call := range wholeHistory.callsFromCurrentSession {
+	for _, call := range wholeHistory.CallsFromCurrentSession {
 		buffer.WriteString(call.GetSimpleReport())
 		// HMM AH: Multiplatform
 		buffer.WriteByte('\n')
@@ -46,10 +46,10 @@ func (wholeHistory *CallBuddyHistory) GetSimpleWholeHistoryReport() string {
 
 // ^ Same comment probably applies here -Dylan
 func (wholeHistory *CallBuddyHistory) GetNthCommand(n int) (string, error) {
-	if n < 0 || n > len(wholeHistory.callsFromCurrentSession)-1 {
+	if n < 0 || n > len(wholeHistory.CallsFromCurrentSession)-1 {
 		return "", fmt.Errorf("No command at pos %d", n)
 	}
-	call := wholeHistory.callsFromCurrentSession[n]
+	call := wholeHistory.CallsFromCurrentSession[n]
 
 	// {method} {request URL} [content-type]
 	cmd := fmt.Sprintf("%s %s", call.Request.Method, call.Request.URL)
@@ -62,5 +62,5 @@ func (wholeHistory *CallBuddyHistory) GetNthCommand(n int) (string, error) {
 }
 
 func (wholeHistory *CallBuddyHistory) Size() int {
-	return len(wholeHistory.callsFromCurrentSession)
+	return len(wholeHistory.CallsFromCurrentSession)
 }

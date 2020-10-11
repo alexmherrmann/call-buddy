@@ -36,7 +36,7 @@ func init() {
 	})
 	globalTelephonoState.Environments = append(globalTelephonoState.Environments, t.CallBuddyEnvironment{userContributor})
 
-	stateFilepath := "state.json"
+	stateFilepath := "./state.json"
 	log.Printf("Loading state from %s\n", stateFilepath)
 	globalTelephonoState.Load(stateFilepath)
 }
@@ -277,6 +277,7 @@ func evalCmdLine(g *gocui.Gui) {
 
 		// Update the history and history view
 		globalTelephonoState.History.AddFinishedCall(historicalCall)
+		globalTelephonoState.Save("./state.json")
 		//updateHistoryView(histView)
 	}
 }
@@ -393,7 +394,6 @@ func updateHistoryView(view *gocui.View) {
 	view.Clear()
 	histFormat := globalTelephonoState.History.GetSimpleWholeHistoryReport()
 	fmt.Fprint(view, histFormat)
-	globalTelephonoState.Save("state.json")
 }
 
 //Setting the manager
