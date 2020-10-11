@@ -2,7 +2,6 @@ package telephono
 
 import (
 	"fmt"
-	"net/http"
 	"strings"
 )
 
@@ -12,8 +11,8 @@ type (
 	//}
 
 	HistoricalCall struct {
-		request  http.Request
-		response http.Response
+		Response Response
+		Request  Request
 	}
 
 	CallBuddyHistory struct {
@@ -21,17 +20,14 @@ type (
 	}
 )
 
-func (wholeHistory *CallBuddyHistory) AddFinishedCall(input CallResponse) {
-	wholeHistory.callsFromCurrentSession = append(wholeHistory.callsFromCurrentSession, HistoricalCall{
-		request:  *(input.Request),
-		response: *input,
-	})
+func (wholeHistory *CallBuddyHistory) AddFinishedCall(call HistoricalCall) {
+	wholeHistory.callsFromCurrentSession = append(wholeHistory.callsFromCurrentSession, call)
 }
 
 // GetSimpleReport generates simple string report that gives info about the request/response
 func (theCall HistoricalCall) GetSimpleReport() string {
 	// {method} {request URL}: {response code} [content length]
-	return fmt.Sprintf("%8s %-50s: [%3d] [%5d] bytes", theCall.request.Method, theCall.request.URL.String(), theCall.response.StatusCode, theCall.response.ContentLength)
+	return fmt.Sprintf("%8s %-50s: [%3d] [%5d] bytes", theCall.Request.Method, theCall.Request.URL, theCall.Response.StatusCode, len(theCall.Response.Body))
 }
 
 // TODO AH: May not be this method's concern, but this is hacky and will get big quickly
@@ -56,11 +52,11 @@ func (wholeHistory *CallBuddyHistory) GetNthCommand(n int) (string, error) {
 	call := wholeHistory.callsFromCurrentSession[n]
 
 	// {method} {request URL} [content-type]
-	cmd := fmt.Sprintf("%s %s", call.request.Method, call.request.URL.String())
+	cmd := fmt.Sprintf("%s %s", call.Request.Method, call.Request.URL)
 
 	// Golang's net.http.Header is a map[string][]string for some reason
-	if len(call.request.Header["Content-type"]) > 0 {
-		cmd += " " + call.request.Header["Content-type"][0]
+	if len(call.Request.Header["Content-type"]) > 0 {
+		cmd += " " + call.Request.Header["Content-type"][0]
 	}
 	return cmd, nil
 }
