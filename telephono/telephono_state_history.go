@@ -44,21 +44,11 @@ func (wholeHistory *CallBuddyHistory) GetSimpleWholeHistoryReport() string {
 	return buffer.String()
 }
 
-// ^ Same comment probably applies here -Dylan
-func (wholeHistory *CallBuddyHistory) GetNthCommand(n int) (string, error) {
+func (wholeHistory *CallBuddyHistory) Get(n int) (HistoricalCall, error) {
 	if n < 0 || n > len(wholeHistory.callsFromCurrentSession)-1 {
-		return "", fmt.Errorf("No command at pos %d", n)
+		return HistoricalCall{}, fmt.Errorf("No history at pos %d", n)
 	}
-	call := wholeHistory.callsFromCurrentSession[n]
-
-	// {method} {request URL} [content-type]
-	cmd := fmt.Sprintf("%s %s", call.Request.Method, call.Request.URL)
-
-	// Golang's net.http.Header is a map[string][]string for some reason
-	if len(call.Request.Header["Content-type"]) > 0 {
-		cmd += " " + call.Request.Header["Content-type"][0]
-	}
-	return cmd, nil
+	return wholeHistory.callsFromCurrentSession[n], nil
 }
 
 func (wholeHistory *CallBuddyHistory) Size() int {
