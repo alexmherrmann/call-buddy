@@ -190,6 +190,80 @@ func exitHistoryView(g *gocui.Gui) {
 	g.Update(setKeybindings)
 }
 
+var helpMessages map[string]string = map[string]string{
+	">": `
+Usage: > FILE
+
+Saves the call response to the given file.
+`,
+	"env": `
+Usage: env KEY=VALUE ...
+
+Stores the given key value pair in the 'User' environment. Use {{User.KEY}} to extract the value.
+`,
+	"header": `
+Usage: header KEY=VALUE ...
+
+Stores the given key value header in the request header view.
+`,
+	"help": `
+Usage: help [COMMAND]
+
+Provides help on call-buddy and on specific commands.
+`,
+	"history": `
+Usage: history
+
+Enters the history view.
+`,
+	"post": `
+Usage: post [url]
+
+Issues a POST request with the request headers and body in the view.
+`,
+	"get": `
+Usage: get [url]
+
+Issues a GET request.
+`,
+	"put": `
+Usage: put [url]
+
+Issues a PUT request with the request headers and body in the view.
+`,
+	"delete": `
+Usage: delete [url]
+
+Issues a DELETE request.
+`,
+	"head": `
+Usage: head [url]
+
+Issues a HEAD request.
+`,
+}
+
+func help(argv []string) string {
+	// Generic help
+	if len(argv) < 2 {
+		var output string
+		i := 0
+		for _, message := range helpMessages {
+			i++
+			output += message
+			output += "\n"
+		}
+		return output
+	}
+	command := argv[1]
+
+	// Specific command help
+	if message, found := helpMessages[command]; found {
+		return message
+	}
+	return "No such command: '" + argv[0] + "'"
+}
+
 func evalCmdLine(g *gocui.Gui) {
 	var historicalCall t.HistoricalCall
 	var err error
@@ -210,7 +284,11 @@ func evalCmdLine(g *gocui.Gui) {
 	command := argv[0]
 
 	switch {
-	case strings.HasPrefix(command, ">"):
+	case command == "help":
+		message := help(argv)
+		updateResponseBodyView(rspBodyView, message)
+
+	case command == ">":
 		if len(argv) < 2 {
 			break
 		}
