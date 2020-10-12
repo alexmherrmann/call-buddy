@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="call-buddy" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="telephono-ui" />
+    <working_directory value="$PROJECT_DIR$/telephono-ui" />
+    <go_parameters value="-i" />
+    <kind value="PACKAGE" />
+    <filePath value="$PROJECT_DIR$" />
+    <package value="github.com/call-buddy/call-buddy/telephono/ui/cmd/call-buddy" />
+    <directory value="$PROJECT_DIR$" />
+    <method v="2" />
+  </configuration>
+</component>
