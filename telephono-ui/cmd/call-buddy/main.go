@@ -190,6 +190,7 @@ func exitHistoryView(g *gocui.Gui) {
 	g.Update(setKeybindings)
 }
 
+// helpMessages A mapping between commands and their help messages.
 var helpMessages map[string]string = map[string]string{
 	">": `
 Usage: > FILE
@@ -259,6 +260,9 @@ var helpMessagesOrder []string = []string{
 	">",
 }
 
+// help Returns a string with help output. If a command is given in argv, the
+// corresponding help message for that command is given. If the command does
+// not exist, an error message is returned.
 func help(argv []string) string {
 	var command string
 
