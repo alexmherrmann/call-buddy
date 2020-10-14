@@ -284,6 +284,8 @@ func evalCmdLine(g *gocui.Gui) {
 	command := argv[0]
 
 	switch {
+	case command == "?": // Just in case people get confused
+		fallthrough
 	case command == "help":
 		message := help(argv)
 		updateResponseBodyView(rspBodyView, message)
