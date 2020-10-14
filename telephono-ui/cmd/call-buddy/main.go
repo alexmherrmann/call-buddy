@@ -190,6 +190,102 @@ func exitHistoryView(g *gocui.Gui) {
 	g.Update(setKeybindings)
 }
 
+// helpMessages A mapping between commands and their help messages.
+var helpMessages map[string]string = map[string]string{
+	">": `
+Usage: > FILE
+
+Saves the call response to the given file.
+`,
+	"env": `
+Usage: env KEY=VALUE ...
+
+Stores the given key value pair in the 'User' environment. Use {{User.KEY}} to extract the value.
+`,
+	"header": `
+Usage: header KEY=VALUE ...
+
+Stores the given key value header in the request header view.
+`,
+	"help": `
+Usage: help [COMMAND]
+
+Provides help on call-buddy and on specific commands.
+`,
+	"history": `
+Usage: history
+
+Enters the history view.
+`,
+	"post": `
+Usage: post [url]
+
+Issues a POST request with the request headers and body in the view.
+`,
+	"get": `
+Usage: get [url]
+
+Issues a GET request.
+`,
+	"put": `
+Usage: put [url]
+
+Issues a PUT request with the request headers and body in the view.
+`,
+	"delete": `
+Usage: delete [url]
+
+Issues a DELETE request.
+`,
+	"head": `
+Usage: head [url]
+
+Issues a HEAD request.
+`,
+}
+
+// helpMessagesOrder The order to display the help messages in since go
+// randomizes iteration order. Also, not alphabetical since 'help' is more
+// important.
+var helpMessagesOrder []string = []string{
+	"help",
+	"get",
+	"post",
+	"put",
+	"delete",
+	"head",
+	"header",
+	"history",
+	"env",
+	">",
+}
+
+// help Returns a string with help output. If a command is given in argv, the
+// corresponding help message for that command is given. If the command does
+// not exist, an error message is returned.
+func help(argv []string) string {
+	var command string
+
+	// Generic help
+	if len(argv) < 2 {
+		var output string
+		i := 0
+		for _, command = range helpMessagesOrder {
+			i++
+			output += helpMessages[command]
+			output += "\n"
+		}
+		return output
+	}
+	command = argv[1]
+
+	// Specific command help
+	if message, found := helpMessages[command]; found {
+		return message
+	}
+	return "No such command: '" + argv[0] + "'"
+}
+
 func evalCmdLine(g *gocui.Gui) {
 	var historicalCall t.HistoricalCall
 	var err error
@@ -210,7 +306,13 @@ func evalCmdLine(g *gocui.Gui) {
 	command := argv[0]
 
 	switch {
-	case strings.HasPrefix(command, ">"):
+	case command == "?": // Just in case people get confused
+		fallthrough
+	case command == "help":
+		message := help(argv)
+		updateResponseBodyView(rspBodyView, message)
+
+	case command == ">":
 		if len(argv) < 2 {
 			break
 		}
