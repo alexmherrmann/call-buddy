@@ -243,19 +243,37 @@ Issues a HEAD request.
 `,
 }
 
+// helpMessagesOrder The order to display the help messages in since go
+// randomizes iteration order. Also, not alphabetical since 'help' is more
+// important.
+var helpMessagesOrder []string = []string{
+	"help",
+	"get",
+	"post",
+	"put",
+	"delete",
+	"head",
+	"header",
+	"history",
+	"env",
+	">",
+}
+
 func help(argv []string) string {
+	var command string
+
 	// Generic help
 	if len(argv) < 2 {
 		var output string
 		i := 0
-		for _, message := range helpMessages {
+		for _, command = range helpMessagesOrder {
 			i++
-			output += message
+			output += helpMessages[command]
 			output += "\n"
 		}
 		return output
 	}
-	command := argv[1]
+	command = argv[1]
 
 	// Specific command help
 	if message, found := helpMessages[command]; found {
