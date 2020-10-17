@@ -8,7 +8,8 @@ import (
 	"strings"
 
 	t "github.com/call-buddy/call-buddy/telephono"
-	"github.com/jroimartin/gocui"
+	//"github.com/jroimartin/gocui"
+	"github.com/call-buddy/gocui"
 )
 
 var globalTelephonoState *t.CallBuddyState = nil
@@ -165,27 +166,35 @@ func call(methodType, url, body string, headers http.Header) (t.HistoricalCall, 
 }
 
 func enterHistoryView(g *gocui.Gui) {
-	g.Update(func(gui *gocui.Gui) error {
+	//Locking here to stop race conditions that can prevent the view
+	//from being present before we set keybindings
+
+	g.SetManagerFunc(histLayout)
+	/*g.Update(func(gui *gocui.Gui) error {
 		gui.SetManagerFunc(histLayout)
-		gui.Update(func(nGui *gocui.Gui) error {
-			setView(nGui, HIST_VIEW, HIST_BODY)
-			return nil
-		})
-		gui.Update(setKeybindings)
-		gui.Update(func(gui *gocui.Gui) error {
-			histView, _ := gui.View(HIST_VIEW)
-			updateHistoryView(histView)
-			return nil
-		})
+		return nil
+	})*/
+
+	g.Update(func(gui *gocui.Gui) error {
+		setView(gui, HIST_VIEW, HIST_BODY)
 		return nil
 	})
+	g.Update(setKeybindings)
+	g.Update(func(gui *gocui.Gui) error {
+		histView, _ := gui.View(HIST_VIEW)
+		updateHistoryView(histView)
+		return nil
+	})
+
+	if globalTelephonoState.History.Size() > 0 {
+		call, _ := globalTelephonoState.History.Get(0)
+		updateViewsWithCall(g, call)
+	}
+
 }
 
 func exitHistoryView(g *gocui.Gui) {
-	g.Update(func(gui *gocui.Gui) error {
-		gui.SetManagerFunc(layout)
-		return nil
-	})
+	g.SetManagerFunc(layout)
 	setView(g, CMD_LINE_VIEW, CMD_LINE)
 	g.Update(setKeybindings)
 }
@@ -381,7 +390,8 @@ func updateViewsWithCall(g *gocui.Gui, call t.HistoricalCall) {
 
 func setView(gui *gocui.Gui, name string, state ViewState) {
 	currView = state
-	currViewPtr, _ := gui.SetCurrentView(name)
+	currViewPtr, err := gui.SetCurrentView(name)
+	log.Print(err)
 	// FIXME Dylan: This should be done only if the editor is editable
 	currViewPtr.Editor = &theEditor
 	gui.SetViewOnTop(name)
@@ -451,9 +461,11 @@ func switchPrevView(g *gocui.Gui, v *gocui.View) error {
 func setHistView(g *gocui.Gui, v *gocui.View) error {
 	// FIXME: POSSIBLY SWITCH BACK TO LAST SELECTED VIEW?
 	if currView == HIST_BODY {
-		setView(g, CMD_LINE_VIEW, CMD_LINE)
+		exitHistoryView(g)
+		//setView(g, CMD_LINE_VIEW, CMD_LINE)
 	} else {
-		setView(g, HIST_VIEW, HIST_BODY)
+		enterHistoryView(g)
+		//setView(g, HIST_VIEW, HIST_BODY)
 	}
 	return nil
 }
@@ -666,7 +678,6 @@ func histLayout(g *gocui.Gui) error {
 		v.Autoscroll = false
 		updateCommandLineView(v, "")
 	}
-
 	return nil
 }
 
@@ -832,7 +843,7 @@ func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
 // histOnEnter Populates the history with the currently selected history item
 func histOnEnter(g *gocui.Gui, v *gocui.View) error {
 	// Always switch back to command line view
-	defer setView(g, CMD_LINE_VIEW, CMD_LINE)
+	exitHistoryView(g)
 
 	// We've already hinted the state when we hit up or down arrows, simply
 	// clear the backup to make it permanent
@@ -846,9 +857,11 @@ func histOnEnter(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		cmd = ""
 	}
+
 	cmd = generateCommand(historicalCall)
 	cmdView, _ := g.View(CMD_LINE_VIEW)
 	updateCommandLineView(cmdView, cmd)
+
 	return nil
 }
 
