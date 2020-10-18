@@ -8,7 +8,8 @@ import (
 	"strings"
 
 	t "github.com/call-buddy/call-buddy/telephono"
-	"github.com/jroimartin/gocui"
+	//"github.com/jroimartin/gocui"
+	"github.com/call-buddy/gocui"
 )
 
 var globalTelephonoState *t.CallBuddyState = nil
@@ -46,6 +47,8 @@ func getCurrentRequestTemplate(state *t.CallBuddyState) *t.RequestTemplate {
 	return globalTelephonoState.Collections[0].RequestTemplates[0]
 }
 
+type HistView gocui.View
+
 var theEditor TCBEditor
 
 type TCBEditor struct {
@@ -61,17 +64,11 @@ func (editor *TCBEditor) Edit(v *gocui.View, key gocui.Key, ch rune, mod gocui.M
 		return
 	}
 
-	switch {
-	case ch != 0 && mod == 0:
-		v.EditWrite(ch)
-	case key == gocui.KeySpace:
-		v.EditWrite(' ')
-	case key == gocui.KeyBackspace || key == gocui.KeyBackspace2:
-		v.EditDelete(true)
-	case ch == '[' && mod == gocui.ModAlt:
+	if ch == '[' && mod == gocui.ModAlt {
 		editor.expectKeyModifier = true
+		return
 	}
-	// FIXME Dylan: Call the parent gocui.Editor.Edit!
+	gocui.DefaultEditor.Edit(v, key, ch, mod)
 }
 
 // ViewState Which view is active
@@ -173,29 +170,133 @@ func call(methodType, url, body string, headers http.Header) (t.HistoricalCall, 
 }
 
 func enterHistoryView(g *gocui.Gui) {
-	g.Update(func(gui *gocui.Gui) error {
+	//Locking here to stop race conditions that can prevent the view
+	//from being present before we set keybindings
+
+	g.SetManagerFunc(histLayout)
+	/*g.Update(func(gui *gocui.Gui) error {
 		gui.SetManagerFunc(histLayout)
-		gui.Update(func(nGui *gocui.Gui) error {
-			setView(nGui, HIST_VIEW, HIST_BODY)
-			return nil
-		})
-		gui.Update(setKeybindings)
-		gui.Update(func(gui *gocui.Gui) error {
-			histView, _ := gui.View(HIST_VIEW)
-			updateHistoryView(histView)
-			return nil
-		})
+		return nil
+	})*/
+
+	g.Update(func(gui *gocui.Gui) error {
+		setView(gui, HIST_VIEW, HIST_BODY)
 		return nil
 	})
+	g.Update(setKeybindings)
+	g.Update(func(gui *gocui.Gui) error {
+		histView, _ := gui.View(HIST_VIEW)
+		updateHistoryView(histView)
+		return nil
+	})
+
+	if globalTelephonoState.History.Size() > 0 {
+		call, _ := globalTelephonoState.History.Get(0)
+		updateViewsWithCall(g, call)
+	}
+
 }
 
 func exitHistoryView(g *gocui.Gui) {
-	g.Update(func(gui *gocui.Gui) error {
-		gui.SetManagerFunc(layout)
-		return nil
-	})
+	g.SetManagerFunc(layout)
 	setView(g, CMD_LINE_VIEW, CMD_LINE)
 	g.Update(setKeybindings)
+}
+
+// helpMessages A mapping between commands and their help messages.
+var helpMessages map[string]string = map[string]string{
+	">": `
+Usage: > FILE
+
+Saves the call response to the given file.
+`,
+	"env": `
+Usage: env KEY=VALUE ...
+
+Stores the given key value pair in the 'User' environment. Use {{User.KEY}} to extract the value.
+`,
+	"header": `
+Usage: header KEY=VALUE ...
+
+Stores the given key value header in the request header view.
+`,
+	"help": `
+Usage: help [COMMAND]
+
+Provides help on call-buddy and on specific commands.
+`,
+	"history": `
+Usage: history
+
+Enters the history view.
+`,
+	"post": `
+Usage: post [url]
+
+Issues a POST request with the request headers and body in the view.
+`,
+	"get": `
+Usage: get [url]
+
+Issues a GET request.
+`,
+	"put": `
+Usage: put [url]
+
+Issues a PUT request with the request headers and body in the view.
+`,
+	"delete": `
+Usage: delete [url]
+
+Issues a DELETE request.
+`,
+	"head": `
+Usage: head [url]
+
+Issues a HEAD request.
+`,
+}
+
+// helpMessagesOrder The order to display the help messages in since go
+// randomizes iteration order. Also, not alphabetical since 'help' is more
+// important.
+var helpMessagesOrder []string = []string{
+	"help",
+	"get",
+	"post",
+	"put",
+	"delete",
+	"head",
+	"header",
+	"history",
+	"env",
+	">",
+}
+
+// help Returns a string with help output. If a command is given in argv, the
+// corresponding help message for that command is given. If the command does
+// not exist, an error message is returned.
+func help(argv []string) string {
+	var command string
+
+	// Generic help
+	if len(argv) < 2 {
+		var output string
+		i := 0
+		for _, command = range helpMessagesOrder {
+			i++
+			output += helpMessages[command]
+			output += "\n"
+		}
+		return output
+	}
+	command = argv[1]
+
+	// Specific command help
+	if message, found := helpMessages[command]; found {
+		return message
+	}
+	return "No such command: '" + argv[0] + "'"
 }
 
 func evalCmdLine(g *gocui.Gui) {
@@ -218,7 +319,13 @@ func evalCmdLine(g *gocui.Gui) {
 	command := argv[0]
 
 	switch {
-	case strings.HasPrefix(command, ">"):
+	case command == "?": // Just in case people get confused
+		fallthrough
+	case command == "help":
+		message := help(argv)
+		updateResponseBodyView(rspBodyView, message)
+
+	case command == ">":
 		if len(argv) < 2 {
 			break
 		}
@@ -231,6 +338,7 @@ func evalCmdLine(g *gocui.Gui) {
 		for _, kv := range argv[1:] {
 			addUserEnvironmentVariable(kv)
 		}
+		updateCommandLineView(cmdLineView, "")
 
 	case command == "history":
 		enterHistoryView(g)
@@ -265,26 +373,29 @@ func evalCmdLine(g *gocui.Gui) {
 			updateResponseBodyView(rspBodyView, err.Error())
 			return
 		}
-		// Print out new response
-		updateResponseBodyView(rspBodyView, historicalCall.Response.String())
-
-		// Update the request views
-		methodBodyView, _ := g.View(MTD_BODY_VIEW)
-		updateMethodBodyView(methodBodyView, historicalCall.Request.URL, historicalCall.Request.Method)
-
-		requestHeaderView, _ := g.View(RQT_HEAD_VIEW)
-		updateRequestHeaderView(requestHeaderView, historicalCall.Request.Header)
-
-		// Update the history and history view
 		globalTelephonoState.History.AddFinishedCall(historicalCall)
-		globalTelephonoState.Save("./state.json")
-		//updateHistoryView(histView)
+		updateViewsWithCall(g, historicalCall)
 	}
+}
+
+func updateViewsWithCall(g *gocui.Gui, call t.HistoricalCall) {
+	// Print out new response
+	rspBodyView, _ := g.View(RSP_BODY_VIEW)
+	responseBody := call.Response.String()
+	updateResponseBodyView(rspBodyView, responseBody)
+
+	// Update the request views
+	methodBodyView, _ := g.View(MTD_BODY_VIEW)
+	updateMethodBodyView(methodBodyView, call.Request.URL, call.Request.Method)
+
+	requestHeaderView, _ := g.View(RQT_HEAD_VIEW)
+	updateRequestHeaderView(requestHeaderView, call.Request.Header)
 }
 
 func setView(gui *gocui.Gui, name string, state ViewState) {
 	currView = state
-	currViewPtr, _ := gui.SetCurrentView(name)
+	currViewPtr, err := gui.SetCurrentView(name)
+	log.Print(err)
 	// FIXME Dylan: This should be done only if the editor is editable
 	currViewPtr.Editor = &theEditor
 	gui.SetViewOnTop(name)
@@ -313,6 +424,8 @@ func switchNextView(g *gocui.Gui, v *gocui.View) error {
 		setView(g, CMD_LINE_VIEW, CMD_LINE)
 	case HIST_BODY:
 		exitHistoryView(g)
+		// -> command line
+		setView(g, CMD_LINE_VIEW, CMD_LINE)
 	default:
 		log.Panicf("Got to a unknown view! %d\n", currView)
 	}
@@ -341,6 +454,8 @@ func switchPrevView(g *gocui.Gui, v *gocui.View) error {
 		setView(g, RQT_BODY_VIEW, RQT_BODY)
 	case HIST_BODY:
 		exitHistoryView(g)
+		// -> method body
+		setView(g, RSP_BODY_VIEW, RSP_BODY)
 	default:
 		log.Panicf("Got to a unknown view! %d\n", currView)
 	}
@@ -350,10 +465,23 @@ func switchPrevView(g *gocui.Gui, v *gocui.View) error {
 func setHistView(g *gocui.Gui, v *gocui.View) error {
 	// FIXME: POSSIBLY SWITCH BACK TO LAST SELECTED VIEW?
 	if currView == HIST_BODY {
+		exitHistoryView(g)
+		//setView(g, CMD_LINE_VIEW, CMD_LINE)
+	} else {
+		enterHistoryView(g)
+		//setView(g, HIST_VIEW, HIST_BODY)
+	}
+	return nil
+}
+
+func setCommandView(g *gocui.Gui, view *gocui.View) error {
+	if currView != HIST_BODY {
 		setView(g, CMD_LINE_VIEW, CMD_LINE)
 	} else {
-		setView(g, HIST_VIEW, HIST_BODY)
+		exitHistoryView(g)
+
 	}
+
 	return nil
 }
 
@@ -394,6 +522,12 @@ func updateHistoryView(view *gocui.View) {
 	view.Clear()
 	histFormat := globalTelephonoState.History.GetSimpleWholeHistoryReport()
 	fmt.Fprint(view, histFormat)
+}
+
+func updateCommandLineView(view *gocui.View, command string) {
+	view.Clear()
+	fmt.Fprint(view, command)
+	view.SetCursor(len(command), 0)
 }
 
 //Setting the manager
@@ -557,8 +691,8 @@ func histLayout(g *gocui.Gui) error {
 		v.Wrap = false
 		v.Editable = true
 		v.Autoscroll = false
+		updateCommandLineView(v, "")
 	}
-
 	return nil
 }
 
@@ -579,6 +713,9 @@ func setKeybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("", gocui.KeyCtrlY, gocui.ModNone, setHistView); err != nil {
 		log.Panicln(err)
 	}
+	if err := g.SetKeybinding("", gocui.KeyF2, gocui.ModNone, setCommandView); err != nil {
+
+	}
 
 	// View-Specific Keybindings:
 
@@ -595,6 +732,9 @@ func setKeybindings(g *gocui.Gui) error {
 		log.Panicln(err)
 	}
 	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyEnter, gocui.ModNone, histOnEnter); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyTab, gocui.ModNone, histOnTab); err != nil {
 		log.Panicln(err)
 	}
 
@@ -628,10 +768,72 @@ func main() {
 	}
 }
 
+// FIXME DG: This should not be a global, ideally we subclass a view and store
+//           the state within that!
+type viewBackup struct {
+	methodBuffer        string
+	requestHeaderBuffer string
+	requestBodyBuffer   string
+	responseBodyBuffer  string
+}
+
+// store Given a GUI, stores the relevant state of the GUI into the backup.
+func (backup *viewBackup) store(g *gocui.Gui) {
+	methodBodyView, _ := g.View(MTD_BODY_VIEW)
+	backup.methodBuffer = methodBodyView.Buffer()
+
+	requestHeaderView, _ := g.View(RQT_HEAD_VIEW)
+	backup.requestHeaderBuffer = requestHeaderView.Buffer()
+
+	requestBodyView, _ := g.View(RQT_BODY_VIEW)
+	backup.requestBodyBuffer = requestBodyView.Buffer()
+
+	responseBodyView, _ := g.View(RSP_BODY_VIEW)
+	backup.responseBodyBuffer = responseBodyView.Buffer()
+}
+
+// restore Given a GUI, restores the stored state into the relevant parts of the GUI.
+func (backup *viewBackup) restore(g *gocui.Gui) {
+	methodBodyView, _ := g.View(MTD_BODY_VIEW)
+	methodBodyView.Clear()
+	fmt.Fprint(methodBodyView, backup.methodBuffer)
+
+	requestHeaderView, _ := g.View(RQT_HEAD_VIEW)
+	requestHeaderView.Clear()
+	fmt.Fprint(requestHeaderView, backup.requestHeaderBuffer)
+
+	requestBodyView, _ := g.View(RQT_BODY_VIEW)
+	requestBodyView.Clear()
+	fmt.Fprint(requestBodyView, backup.requestBodyBuffer)
+
+	responseBodyView, _ := g.View(RSP_BODY_VIEW)
+	responseBodyView.Clear()
+	fmt.Fprint(responseBodyView, backup.responseBodyBuffer)
+}
+
+func (backup *viewBackup) clear() {
+	backup.methodBuffer = ""
+	backup.requestHeaderBuffer = ""
+	backup.requestBodyBuffer = ""
+	backup.responseBodyBuffer = ""
+}
+
+var histHintViewBackup viewBackup
+
+// histOnEnter Populates the history with the currently selected history item
+func histOnTab(g *gocui.Gui, v *gocui.View) error {
+	histHintViewBackup.restore(g)
+	return switchNextView(g, v)
+}
+
 func histArrowUp(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
 	if curY > 0 && globalTelephonoState.History.Size() > 0 {
 		curY -= 1
+
+		// Show hint for selected history
+		call, _ := globalTelephonoState.History.Get(curY)
+		updateViewsWithCall(gui, call)
 	}
 	view.SetCursor(curX, curY)
 	return nil
@@ -641,6 +843,10 @@ func histArrowDown(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
 	if curY < globalTelephonoState.History.Size()-1 {
 		curY += 1
+
+		// Show hint for selected history
+		call, _ := globalTelephonoState.History.Get(curY)
+		updateViewsWithCall(gui, call)
 	}
 	view.SetCursor(curX, curY)
 	return nil
@@ -654,15 +860,36 @@ func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
 
 // histOnEnter Populates the history with the currently selected history item
 func histOnEnter(g *gocui.Gui, v *gocui.View) error {
-	defer setView(g, CMD_LINE_VIEW, CMD_LINE)
+	// Always switch back to command line view
+	exitHistoryView(g)
+
+	// We've already hinted the state when we hit up or down arrows, simply
+	// clear the backup to make it permanent
+	histHintViewBackup.clear()
+
+	// Load the command corresponding to the history element at the cursor
+	// into the view
 	_, curY := v.Cursor()
-	cmd, err := globalTelephonoState.History.GetNthCommand(curY)
+	var cmd string
+	historicalCall, err := globalTelephonoState.History.Get(curY)
 	if err != nil {
 		cmd = ""
 	}
+
+	cmd = generateCommand(historicalCall)
 	cmdView, _ := g.View(CMD_LINE_VIEW)
-	cmdView.Clear()
-	fmt.Fprint(cmdView, cmd)
-	cmdView.SetCursor(len(cmd), 0)
+	updateCommandLineView(cmdView, cmd)
+
 	return nil
+}
+
+func generateCommand(historicalCall t.HistoricalCall) string {
+	// {method} {request URL} [content-type]
+	cmd := fmt.Sprintf("%s %s", historicalCall.Request.Method, historicalCall.Request.URL)
+
+	// Golang's net.http.Header is a map[string][]string for some reason
+	if len(historicalCall.Request.Header["Content-type"]) > 0 {
+		cmd += " " + historicalCall.Request.Header["Content-type"][0]
+	}
+	return cmd
 }
