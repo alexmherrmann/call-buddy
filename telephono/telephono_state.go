@@ -2,8 +2,11 @@ package telephono
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -18,6 +21,20 @@ const (
 	Delete            = "DELETE"
 	Head              = "HEAD"
 )
+
+func (m *HttpMethod) UnmarshalJSON(buf []byte) error {
+	var method string
+	if err := json.Unmarshal(buf, &method); err != nil {
+		return err
+	}
+	walrus, err := toHttpMethod(method)
+	*m = walrus
+	return err
+}
+
+func (m HttpMethod) MarshalJSON() ([]byte, error) {
+	return json.Marshal(m.String())
+}
 
 func AllHttpMethods() []HttpMethod {
 	return []HttpMethod{Post, Get, Put, Delete, Head}
@@ -68,6 +85,39 @@ type CallBuddyState struct {
 
 	// The history of calls made (just during this session?)
 	History CallBuddyHistory
+}
+
+func (state CallBuddyState) Save(filepath string) error {
+	stateFile, err := os.OpenFile(filepath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("Failed to open state file %s: %s\n", filepath, err)
+		return err
+	}
+	defer stateFile.Close()
+
+	log.Printf("Encoding state...")
+	enc := json.NewEncoder(stateFile)
+	if err := enc.Encode(&state); err != nil {
+		log.Println("Failed to encode state: %s\n", err)
+		return err
+	}
+	return nil
+}
+
+func (state CallBuddyState) Load(filepath string) error {
+	stateFile, err := os.Open(filepath)
+	if err != nil {
+		log.Printf("Failed to open state file %s: %s\n", filepath, err)
+		return err
+	}
+	defer stateFile.Close()
+
+	dec := json.NewDecoder(stateFile)
+	if err := dec.Decode(&state); err != nil {
+		log.Printf("Failed to decode state: %s\n", err)
+		return err
+	}
+	return nil
 }
 
 // NOTE AH: This should become private and will be used

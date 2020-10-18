@@ -16,12 +16,12 @@ type (
 	}
 
 	CallBuddyHistory struct {
-		callsFromCurrentSession []HistoricalCall
+		CallsFromCurrentSession []HistoricalCall
 	}
 )
 
 func (wholeHistory *CallBuddyHistory) AddFinishedCall(call HistoricalCall) {
-	wholeHistory.callsFromCurrentSession = append(wholeHistory.callsFromCurrentSession, call)
+	wholeHistory.CallsFromCurrentSession = append(wholeHistory.CallsFromCurrentSession, call)
 }
 
 // GetSimpleReport generates simple string report that gives info about the request/response
@@ -35,7 +35,7 @@ func (theCall HistoricalCall) GetSimpleReport() string {
 func (wholeHistory *CallBuddyHistory) GetSimpleWholeHistoryReport() string {
 	buffer := strings.Builder{}
 
-	for _, call := range wholeHistory.callsFromCurrentSession {
+	for _, call := range wholeHistory.CallsFromCurrentSession {
 		buffer.WriteString(call.GetSimpleReport())
 		// HMM AH: Multiplatform
 		buffer.WriteByte('\n')
@@ -44,13 +44,14 @@ func (wholeHistory *CallBuddyHistory) GetSimpleWholeHistoryReport() string {
 	return buffer.String()
 }
 
+
 func (wholeHistory *CallBuddyHistory) Get(n int) (HistoricalCall, error) {
-	if n < 0 || n > len(wholeHistory.callsFromCurrentSession)-1 {
+	if n < 0 || n > len(wholeHistory.CallsFromCurrentSession)-1 {
 		return HistoricalCall{}, fmt.Errorf("No history at pos %d", n)
 	}
-	return wholeHistory.callsFromCurrentSession[n], nil
+	return wholeHistory.CallsFromCurrentSession[n], nil
 }
 
 func (wholeHistory *CallBuddyHistory) Size() int {
-	return len(wholeHistory.callsFromCurrentSession)
+	return len(wholeHistory.CallsFromCurrentSession)
 }

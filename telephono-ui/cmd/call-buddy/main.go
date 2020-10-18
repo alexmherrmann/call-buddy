@@ -14,6 +14,7 @@ import (
 
 var globalTelephonoState *t.CallBuddyState = nil
 var userContributor t.SimpleContributor = t.NewSimpleContributor("User")
+var stateFilepath = "state.json"
 
 func init() {
 	if f, err := os.OpenFile("tui.log", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755); err != nil {
@@ -36,6 +37,9 @@ func init() {
 				ExpandableBody: t.NewExpandable("Hello World")}},
 	})
 	globalTelephonoState.Environments = append(globalTelephonoState.Environments, t.CallBuddyEnvironment{userContributor})
+
+	log.Printf("Loading state from %s\n", stateFilepath)
+	globalTelephonoState.Load(stateFilepath)
 }
 
 func getCurrentRequestTemplate(state *t.CallBuddyState) *t.RequestTemplate {
@@ -370,6 +374,7 @@ func evalCmdLine(g *gocui.Gui) {
 			return
 		}
 		globalTelephonoState.History.AddFinishedCall(historicalCall)
+		globalTelephonoState.Save(stateFilepath)
 		updateViewsWithCall(g, historicalCall)
 	}
 }
