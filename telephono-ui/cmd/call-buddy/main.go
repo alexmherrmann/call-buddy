@@ -470,6 +470,17 @@ func setHistView(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func setCommandView(g *gocui.Gui, view *gocui.View) error {
+	if currView != HIST_BODY {
+		setView(g, CMD_LINE_VIEW, CMD_LINE)
+	} else {
+		exitHistoryView(g)
+
+	}
+
+	return nil
+}
+
 func updateMethodBodyView(view *gocui.View, url string, method t.HttpMethod) {
 	view.Clear()
 
@@ -697,6 +708,9 @@ func setKeybindings(g *gocui.Gui) error {
 	}
 	if err := g.SetKeybinding("", gocui.KeyCtrlY, gocui.ModNone, setHistView); err != nil {
 		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("", gocui.KeyF2, gocui.ModNone, setCommandView); err != nil {
+
 	}
 
 	// View-Specific Keybindings:
