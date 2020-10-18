@@ -1,3 +1,7 @@
+github.com/call-buddy/gocui v0.4.1-alpha h1:d97n+77RWDl5Sw8THTWxWMfdDgK4jWi1Kc/yn29PuKw=
+github.com/call-buddy/gocui v0.4.1-alpha/go.mod h1:9/yHCetZNJn/0uR2juEA5Mtvmmx066Jq6m1kgfdgpM4=
+github.com/call-buddy/gocui v0.4.1-beta h1:G9xaPoHMtb9dA/J76ZPQtgDKc+eLdkDOgSdWhO4AG5c=
+github.com/call-buddy/gocui v0.4.1-beta/go.mod h1:9/yHCetZNJn/0uR2juEA5Mtvmmx066Jq6m1kgfdgpM4=
 github.com/call-buddy/gocui v0.4.1 h1:CIjMHByQirXxK2aChM1WO7FoxBotnXcscEdBhFwFOxw=
 github.com/call-buddy/gocui v0.4.1/go.mod h1:9/yHCetZNJn/0uR2juEA5Mtvmmx066Jq6m1kgfdgpM4=
 github.com/call-buddy/gocui v0.4.2 h1:JSf+/aTcNYThwXnmElIu8O4Pmvt0mbqCeEnaBhqHah8=
