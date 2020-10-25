@@ -1,0 +1,56 @@
+#!/bin/bash
+set -e
+sync() {
+    while true; do
+        rsync -av --exclude "call-buddy" "$target:~/.call-buddy/" `pwd` >> sync.log
+        if ! test $? -eq 0; then
+            echo "Failed to sync using rsync... continuing without rsync" > /dev/stderr
+            return
+        fi
+        sleep 3
+    done
+}
+syncup() {
+    echo "Syncing up the state and files..." > /dev/stderr
+    rsync -av "state.json" $@ "$target:~/.call-buddy/" >> sync.log
+}
+die() {
+    echo "$@" > /dev/stderr
+    exit 1
+}
+
+if [ "$1" == "" ]; then
+    die "No target given"
+fi
+target="$1"
+
+if ! [ -d "$TCB_ARCH_DIR" ]; then
+    die "TCB_ARCH_DIR=\"$TCB_ARCH_DIR\" does not exist"
+fi
+
+printf "Looking up architecture..." > /dev/stderr
+lookup_arch_cmd="uname -s -m | tr ' ' '-' | tr '[:upper:]' '[:lower:]'"
+arch="$(ssh "$target" "$lookup_arch_cmd")"
+if [ "$arch" == "" ]; then
+    die "could not lookup architecture of '$target'"
+fi
+echo " found $arch" > /dev/stderr
+
+source_call_buddy="$TCB_ARCH_DIR/$arch/call-buddy"
+if ! [ -x "$source_call_buddy" ]; then
+    die "$arch binary of call-buddy does not exist at '$source_call_buddy'"
+fi
+
+echo "Syncing $TCB_ARCH_DIR/$arch/call-buddy to $target:~/.call-buddy/call-buddy..." > /dev/stderr
+remote_call_buddy="$target:~/.call-buddy/call-buddy"
+ssh "$target" "mkdir -p ~/.call-buddy"
+if ! rsync -av "$source_call_buddy" "$remote_call_buddy" >> sync.log; then
+    die "Failed to sync '$source_call_buddy' to '$remote_call_buddy'"
+fi
+
+echo "Spawning off syncing agent..." > /dev/stderr
+shift
+syncup $@
+sync &
+trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
+ssh -t "$target" "cd ~/.call-buddy && ./call-buddy"
