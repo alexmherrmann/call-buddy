@@ -10,6 +10,10 @@ sync() {
         sleep 3
     done
 }
+syncup() {
+    echo "Syncing up the state and files..." > /dev/stderr
+    rsync -av "state.json" $@ "$target:~/.call-buddy/" >> sync.log
+}
 die() {
     echo "$@" > /dev/stderr
     exit 1
@@ -39,11 +43,14 @@ fi
 
 echo "Syncing $TCB_ARCH_DIR/$arch/call-buddy to $target:~/.call-buddy/call-buddy..." > /dev/stderr
 remote_call_buddy="$target:~/.call-buddy/call-buddy"
-if ! scp "$source_call_buddy" "$remote_call_buddy"; then
+ssh "$target" "mkdir -p ~/.call-buddy"
+if ! rsync -av "$source_call_buddy" "$remote_call_buddy" >> sync.log; then
     die "Failed to sync '$source_call_buddy' to '$remote_call_buddy'"
 fi
 
 echo "Spawning off syncing agent..." > /dev/stderr
+shift
+syncup $@
 sync &
 trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
 ssh -t "$target" "cd ~/.call-buddy && ./call-buddy"
