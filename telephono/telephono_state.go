@@ -3,73 +3,10 @@ package telephono
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"os"
-	"strings"
 )
-
-//here is a test comment to make sure i am editing and commiting correctly - coop diddy
-
-type HttpMethod string
-
-const (
-	Post   HttpMethod = "POST"
-	Get               = "GET"
-	Put               = "PUT"
-	Delete            = "DELETE"
-	Head              = "HEAD"
-)
-
-func (m *HttpMethod) UnmarshalJSON(buf []byte) error {
-	var method string
-	if err := json.Unmarshal(buf, &method); err != nil {
-		return err
-	}
-	walrus, err := toHttpMethod(method)
-	*m = walrus
-	return err
-}
-
-func (m HttpMethod) MarshalJSON() ([]byte, error) {
-	return json.Marshal(m.String())
-}
-
-func AllHttpMethods() []HttpMethod {
-	return []HttpMethod{Post, Get, Put, Delete, Head}
-}
-
-func (m HttpMethod) String() string {
-	return string(m)
-}
-
-func toHttpMethod(method string) (HttpMethod, error) {
-	methodUpper := strings.ToUpper(method)
-	switch methodUpper {
-	case "POST":
-		return Post, nil
-	case "GET":
-		return Get, nil
-	case "PUT":
-		return Put, nil
-	case "DELETE":
-		return Delete, nil
-	case "HEAD":
-		return Head, nil
-	}
-	return "", errors.New("No such HTTP method " + method)
-}
-
-type expandable interface {
-	//GetUnexpanded gives the string as it is now
-	GetUnexpanded() string
-	//SetUnexpanded will set the unexpanded string
-	SetUnexpanded(string)
-
-	//Expand takes the expander and will return the expanded string
-	Expand(expandable Expander) (string, error)
-}
 
 /*CallBuddyState is the full shippable state of call buddy
 environments, call templates, possibly history, variables, etc. are all in here
@@ -80,14 +17,16 @@ type CallBuddyState struct {
 
 	// Our collections of request templates
 	Collections []CallBuddyCollection
+
 	// The environments we source our variables from
-	Environments []CallBuddyEnvironment
+	Environment CallBuddyEnvironment
 
 	// The history of calls made (just during this session?)
 	History CallBuddyHistory
 }
 
-func (state CallBuddyState) Save(filepath string) error {
+// Save Saves the given call buddy state as JSON to the specififed file.
+func (state *CallBuddyState) Save(filepath string) error {
 	stateFile, err := os.OpenFile(filepath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Printf("Failed to open state file %s: %s\n", filepath, err)
@@ -104,7 +43,8 @@ func (state CallBuddyState) Save(filepath string) error {
 	return nil
 }
 
-func (state CallBuddyState) Load(filepath string) error {
+// Load Loads the call buddy state in JSON from the specififed file.
+func (state *CallBuddyState) Load(filepath string) error {
 	stateFile, err := os.Open(filepath)
 	if err != nil {
 		log.Printf("Failed to open state file %s: %s\n", filepath, err)
@@ -120,32 +60,19 @@ func (state CallBuddyState) Load(filepath string) error {
 	return nil
 }
 
-// NOTE AH: This should become private and will be used
-// GenerateExpander will take the contributors and generate an expander on the fly for a call being made
-func (state CallBuddyState) GenerateExpander() Expander {
-	contributors := make([]ContextContributor, len(state.Environments))
-	for idx, environment := range state.Environments {
-		contributors[idx] = environment.StoredVariables
-	}
-
-	toReturn := Expander{
-		contributors: contributors,
-	}
-
-	return toReturn
-}
-
 //InitNewState creates a correctly initialized CallBuddyState with some defaults
 func InitNewState() CallBuddyState {
-
-	environmentContributor := EnvironmentContributor{}
-
-	environmentContributor.refresh()
-	return CallBuddyState{
-		Collections:  []CallBuddyCollection{},
-		Environments: []CallBuddyEnvironment{{environmentContributor}},
-		History:      CallBuddyHistory{},
+	state := CallBuddyState{
+		Collections: []CallBuddyCollection{},
+		Environment: CallBuddyEnvironment{
+			OS:   Environment{"Var", map[string]string{}},
+			User: Environment{"User", map[string]string{}},
+			Home: Environment{"Home", map[string]string{}},
+		},
+		History: CallBuddyHistory{},
 	}
+	state.Environment.OS.PopulateFromEnviron()
+	return state
 }
 
 type CallBuddyCollection struct {
@@ -155,7 +82,29 @@ type CallBuddyCollection struct {
 }
 
 type CallBuddyEnvironment struct {
-	StoredVariables ContextContributor
+	OS   Environment
+	User Environment
+	Home Environment
+}
+
+func (env *CallBuddyEnvironment) UnmarshalJSON(b []byte) error {
+	// See MarshalJSON
+	var userEnv Environment
+	if err := json.Unmarshal(b, &userEnv); err != nil {
+		return err
+	}
+	env.User = userEnv
+	return nil
+}
+
+func (env *CallBuddyEnvironment) MarshalJSON() ([]byte, error) {
+	// We only care about the user environment, not the OS one
+	return json.Marshal(env.User)
+}
+
+// Expands the string in all the environments
+func (env *CallBuddyEnvironment) Expand(content string) string {
+	return env.OS.Expand(env.User.Expand(content))
 }
 
 type CallBuddyInternalState struct {
@@ -168,7 +117,6 @@ type CallBuddyInternalState struct {
 var globalState CallBuddyInternalState
 
 func init() {
-
 	// TODO AH: Make this timeout longer and configurable. Maybe have a check for number of received bytes on each call
 	//timeoutContext, cancelFunc := context.@WithTimeout(context.Background(), time.Minute*3)
 	// goddamn I love garbage collection

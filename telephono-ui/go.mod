@@ -4,8 +4,6 @@ go 1.14
 
 replace github.com/call-buddy/call-buddy/telephono => ../telephono
 
-//replace github.com/call-buddy/gocui => /Users/dylngg/Local/go/src/github.com/call-buddy/gocui
-
 require (
 	github.com/call-buddy/call-buddy/telephono v0.0.2
 	github.com/call-buddy/gocui v0.0.0-20201018054632-f47c77447ba4

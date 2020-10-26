@@ -48,9 +48,12 @@ if ! rsync -av "$source_call_buddy" "$remote_call_buddy" >> sync.log; then
     die "Failed to sync '$source_call_buddy' to '$remote_call_buddy'"
 fi
 
-echo "Spawning off syncing agent..." > /dev/stderr
+local_env_file="$(hostname).env"
+env > "$local_env_file"
+
 shift
-syncup $@
+syncup $@ $local_env_file
 sync &
+
 trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
-ssh -t "$target" "cd ~/.call-buddy && ./call-buddy"
+ssh -t "$target" "cd ~/.call-buddy && ./call-buddy -e $local_env_file"

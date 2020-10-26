@@ -5,52 +5,46 @@ import (
 	"strings"
 )
 
-type Body BasicExpandable
-
 type RequestTemplate struct {
-	Method         HttpMethod
-	Url            *BasicExpandable
-	Headers        HeadersTemplate
-	ExpandableBody *BasicExpandable
-	// TODO AH: specify a body type that's just given a reader.
+	Method  HttpMethod
+	Url     string
+	Headers http.Header
+	Body    string // FIXME DG: byte buffer or reader?
 }
 
 //executeWithClientAndExpander will execute this call template with the specified client and expander, returning a response or an error
-func (r *RequestTemplate) ExecuteWithClientAndExpander(client *http.Client, expander Expander) (HistoricalCall, error) {
-	//expand the url
-	expandedUrl, urlErr := r.Url.Expand(expander)
-	if urlErr != nil {
-		return HistoricalCall{}, urlErr
-	}
+func (r *RequestTemplate) Execute(client *http.Client, env *CallBuddyEnvironment) (HistoricalCall, error) {
+	expandedUrl := env.Expand(r.Url)
 
-	//expand the body
-	//TODO AH: file bodies for things like binary data or purposefully unrendered stuff
-	//OPTIMIZE AH: Instead of just expanding this, stream it so that we're not loading so many things into memory
-	expandedBody, bodyErr := r.ExpandableBody.Expand(expander)
-	if bodyErr != nil {
-		return HistoricalCall{}, bodyErr
-	}
-
+	// Weird dance where Go wants a body reader for HTTP calls
+	expandedBody := env.OS.Expand(env.User.Expand(r.Body))
 	bodyReader := strings.NewReader(expandedBody)
 	httpRequest, newCallErr := http.NewRequestWithContext(globalState.callContext, string(r.Method), expandedUrl, bodyReader)
 	if newCallErr != nil {
 		return HistoricalCall{}, newCallErr
 	}
 
-	// This must be done before we do our call since the call consumes the body
+	// This must be done before we do our call since the call consumes the body (since it's a reader)
+	// Populate our own structs with Go's http.Request
 	request := Request{}
 	request.Populate(httpRequest)
 
 	// Add the headers
-	if header, errors := r.Headers.ExpandAllAsHeader(expander); len(errors) == 0 {
-		httpRequest.Header = header
+	header := http.Header{}
+	for key, values := range r.Headers {
+		for _, value := range values {
+			header[key] = append(header[key], env.Expand(value))
+		}
 	}
+	httpRequest.Header = header
 
+	// Call!
 	httpResponse, doErr := client.Do(httpRequest)
 	if doErr != nil {
 		return HistoricalCall{}, doErr
 	}
 
+	// Populate our own structs with Go's http.Response
 	response := Response{}
 	response.Populate(httpResponse)
 
