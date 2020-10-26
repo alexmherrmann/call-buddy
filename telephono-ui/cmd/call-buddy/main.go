@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -172,24 +173,48 @@ func enterHistoryView(g *gocui.Gui) {
 		setView(gui, HIST_VIEW, HIST_BODY)
 		return nil
 	})
-	g.Update(setKeybindings)
 	g.Update(func(gui *gocui.Gui) error {
 		histView, _ := gui.View(HIST_VIEW)
 		updateHistoryView(histView)
 		return nil
 	})
 
-	if globalTelephonoState.History.Size() > 0 {
-		call, _ := globalTelephonoState.History.Get(0)
-		updateViewsWithCall(g, call)
-	}
-
+	g.Update(func(gui *gocui.Gui) error {
+		if globalTelephonoState.History.Size() > 0 {
+			call, _ := globalTelephonoState.History.Get(0)
+			updateViewsWithCall(gui, call)
+		}
+		return nil
+	})
+	g.Update(setKeybindings)
 }
 
 func exitHistoryView(g *gocui.Gui) {
 	g.SetManagerFunc(layout)
-	setView(g, CMD_LINE_VIEW, CMD_LINE)
+	g.Update(func(gui *gocui.Gui) error {
+		setView(gui, CMD_LINE_VIEW, CMD_LINE)
+		return nil
+	})
 	g.Update(setKeybindings)
+}
+
+func dumpEnvironment(name string) (output string) {
+	if name == "User" || name == "" {
+		for key, value := range globalTelephonoState.Environment.User.Mapping {
+			output += fmt.Sprintf("%s.%s=%s\n", globalTelephonoState.Environment.User.Name, key, value)
+		}
+	}
+	if name == "Var" || name == "" {
+		for key, value := range globalTelephonoState.Environment.OS.Mapping {
+			output += fmt.Sprintf("%s.%s=%s\n", globalTelephonoState.Environment.OS.Name, key, value)
+		}
+	}
+	if name == "Home" || name == "" {
+		for key, value := range globalTelephonoState.Environment.Home.Mapping {
+			output += fmt.Sprintf("%s.%s=%s\n", globalTelephonoState.Environment.Home.Name, key, value)
+		}
+	}
+	return output
 }
 
 // helpMessages A mapping between commands and their help messages.
@@ -200,9 +225,10 @@ Usage: > FILE
 Saves the call response to the given file.
 `,
 	"env": `
-Usage: env KEY=VALUE ...
+Usage: env [KEY=VALUE] ...
 
-Stores the given key value pair in the 'User' environment. Use {{User.KEY}} to extract the value.
+Displays the environment or stores the given key value pair in the
+'User' environment. Use {{User.KEY}} to extract the value.
 `,
 	"header": `
 Usage: header KEY=VALUE ...
@@ -322,10 +348,15 @@ func evalCmdLine(g *gocui.Gui) {
 
 	case command == "env":
 		if len(argv) < 2 {
-			break
-		}
-		for _, kv := range argv[1:] {
-			addUserEnvironmentVariable(kv)
+			env := dumpEnvironment("")
+			updateResponseBodyView(rspBodyView, env)
+		} else if strings.Contains(argv[1], "=") {
+			for _, kv := range argv[1:] {
+				addUserEnvironmentVariable(kv)
+			}
+		} else {
+			env := dumpEnvironment(argv[1])
+			updateResponseBodyView(rspBodyView, env)
 		}
 		updateCommandLineView(cmdLineView, "")
 
@@ -722,6 +753,12 @@ func setKeybindings(g *gocui.Gui) error {
 }
 
 func main() {
+	envFile := flag.String("e", "", "Environment file to load from")
+	flag.Parse()
+	if envFile != nil {
+		globalTelephonoState.Environment.Home.PopulateFromFile(*envFile)
+	}
+
 	//Setting up a new TUI
 	g, err := gocui.NewGui(gocui.OutputNormal)
 	if err != nil {

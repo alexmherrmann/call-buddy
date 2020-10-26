@@ -67,6 +67,7 @@ func InitNewState() CallBuddyState {
 		Environment: CallBuddyEnvironment{
 			OS:   Environment{"Var", map[string]string{}},
 			User: Environment{"User", map[string]string{}},
+			Home: Environment{"Home", map[string]string{}},
 		},
 		History: CallBuddyHistory{},
 	}
@@ -83,6 +84,7 @@ type CallBuddyCollection struct {
 type CallBuddyEnvironment struct {
 	OS   Environment
 	User Environment
+	Home Environment
 }
 
 func (env *CallBuddyEnvironment) UnmarshalJSON(b []byte) error {

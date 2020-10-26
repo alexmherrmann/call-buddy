@@ -1,6 +1,7 @@
 package telephono
 
 import (
+	"bufio"
 	"os"
 	"strings"
 
@@ -42,6 +43,24 @@ func (env *Environment) Set(key, value string) {
 func (env *Environment) PopulateFromEnviron() {
 	for _, kv := range os.Environ() {
 		parts := strings.SplitN(kv, "=", 2)
-		env.Mapping[parts[0]] = parts[1]
+		env.Set(parts[0], parts[1])
 	}
+}
+
+func (env *Environment) PopulateFromFile(filepath string) error {
+	fd, err := os.Open(filepath)
+	if err != nil {
+		return err
+	}
+	defer fd.Close()
+
+	scanner := bufio.NewScanner(fd)
+	for scanner.Scan() {
+		parts := strings.SplitN(scanner.Text(), "=", 2)
+		env.Set(parts[0], parts[1])
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return nil
 }
