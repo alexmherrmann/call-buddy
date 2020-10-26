@@ -46,3 +46,7 @@ freebsd amd64 x86_64
 freebsd 386
 freebsd 386 i386
 # Presumably Windows should be here, but don't have official support yet
+windows 386
+windows 386 i386
+windows amd64
+windows amd64 x86_64
