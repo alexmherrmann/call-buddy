@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	t "github.com/call-buddy/call-buddy/telephono"
@@ -219,10 +221,42 @@ func dumpEnvironment(name string) (output string) {
 
 // helpMessages A mapping between commands and their help messages.
 var helpMessages map[string]string = map[string]string{
+	"!": `
+Usage: ! SHELL-COMMAND
+
+Passes the given shell command(s) to the shell and executes it. The
+response body is piped into the shell's stdin and the shell's stdout
+is captured and updated in place of the response body pane after the
+shell finishes execution.
+
+The shell is choosen and executed in the following manner:
+
+  1. If the SHELL environment variable is set in either the {{User}}
+     environment or {{Var}} environment (which is inherited from the
+     spawning process' environment), with the former taking priority,
+     then '{{SHELL}} -c SHELL-COMMAND' is executed. The SHELL-COMMAND
+     need not to be escaped.
+
+  2. If the OS is Windows, PowerShell is used and executed as:
+     'PowerShell.exe -Command SHELL-COMMAND'. The SHELL-COMMAND need
+     not to be escaped.
+
+  3. Otherwise, a UNIX system is assumed and /bin/sh is used in the
+     manner described for the SHELL environment variable.
+
+Examples (assuming a UNIX system):
+
+! grep KEY		Filters the response body to only contain
+			lines with 'KEY'
+! ifconfig		Dumps the network interfaces.
+! tail -30 | grep KEY 	Filters the response body to only contain
+			the last 30 lines and filters those lines
+			again to those that contain 'KEY'
+`,
 	">": `
 Usage: > FILE
 
-Saves the call response to the given file.
+Saves the call response to the given file (and overrides the contents).
 `,
 	"env": `
 Usage: env [KEY=VALUE] ...
@@ -248,7 +282,8 @@ Enters the history view.
 	"post": `
 Usage: post [url]
 
-Issues a POST request with the request headers and body in the view.
+Issues a POST request with the request headers and body in the
+view.
 `,
 	"get": `
 Usage: get [url]
@@ -258,7 +293,8 @@ Issues a GET request.
 	"put": `
 Usage: put [url]
 
-Issues a PUT request with the request headers and body in the view.
+Issues a PUT request with the request headers and body in the
+view.
 `,
 	"delete": `
 Usage: delete [url]
@@ -286,6 +322,7 @@ var helpMessagesOrder []string = []string{
 	"history",
 	"env",
 	">",
+	"!",
 }
 
 // help Returns a string with help output. If a command is given in argv, the
@@ -314,6 +351,52 @@ func help(argv []string) string {
 	return "No such command: '" + argv[0] + "'"
 }
 
+// lookupShell Returns the shell for the user.
+func lookupShell() (shellArgv []string) {
+	// Normally we'd lookup the default shell via getpwuid, but that only
+	// exists on UNIX systems and it gets really realy messy to deal with
+	// cgo and linking against libc for all cross-compilations. So we'll
+	// use $SHELL instead and then fallback to /bin/sh for non-Windows
+	// systems and PowerShell for our Windows friends
+	shell := globalTelephonoState.Environment.User.Expand("{{User.SHELL}}")
+	if shell != "" {
+		shellArgv = []string{shell, "-c"}
+		return
+	}
+
+	shell = globalTelephonoState.Environment.OS.Expand("{{Var.SHELL}}")
+	if shell != "" {
+		shellArgv = []string{shell, "-c"}
+		return
+	}
+
+	shellArgv = []string{"/bin/sh", "-c"}
+	if runtime.GOOS == "windows" {
+		shellArgv = []string{"PowerShell.exe", "-Command"}
+	}
+	return
+}
+
+func bang(argv []string, input string) string {
+	shellArgv := lookupShell()
+	shellArgv = append(shellArgv, argv[1:]...)
+
+	cmd := exec.Command(shellArgv[0], shellArgv[1:]...)
+	log.Printf("%s %v", shellArgv[0], shellArgv[1:])
+	cmd.Stdin = strings.NewReader(input)
+
+	// Grab out stderr and stdout
+	// FIXME DG: We shouldn't trust stdout/stderr to be a valid string,
+	//           but rather a byte stream so string(output) might cause
+	//           problems...
+	output, err := cmd.CombinedOutput()
+	log.Printf("output: %s\n", output)
+	if err != nil {
+		return err.Error()
+	}
+	return string(output)
+}
+
 func evalCmdLine(g *gocui.Gui) {
 	var historicalCall t.HistoricalCall
 	var err error
@@ -334,6 +417,12 @@ func evalCmdLine(g *gocui.Gui) {
 	command := argv[0]
 
 	switch {
+	case command == "!":
+		rest := strings.Join(argv[1:], " ")
+		message := bang([]string{command, rest}, rspBodyView.Buffer())
+		rspBodyView, _ := g.View(RSP_BODY_VIEW)
+		updateResponseBodyView(rspBodyView, message)
+
 	case command == "?": // Just in case people get confused
 		fallthrough
 	case command == "help":
@@ -529,6 +618,7 @@ func updateRequestHeaderView(view *gocui.View, headers http.Header) {
 
 func updateRequestBodyView(view *gocui.View, body string) {
 	view.Clear()
+	fmt.Fprint(view, "")
 	fmt.Fprint(view, body)
 }
 
@@ -536,6 +626,7 @@ func updateResponseBodyView(g *gocui.Gui, view *gocui.View, body string) {
 	view.Clear()
 	fmt.Fprint(view, "")
 	fmt.Fprint(view, body)
+	log.Printf("Buffer: %s", view.Buffer())
 }
 
 func updateHistoryView(view *gocui.View) {
@@ -574,7 +665,7 @@ func layout(g *gocui.Gui) error {
 		}
 		v.Title = "Response Body"
 		v.Wrap = true
-		v.Autoscroll = true
+		v.Autoscroll = false
 		v.Editable = true
 	}
 
@@ -598,7 +689,7 @@ func layout(g *gocui.Gui) error {
 		}
 		v.Title = "Request Headers"
 		v.Wrap = true
-		v.Autoscroll = true
+		v.Autoscroll = false
 		v.Editable = true
 	}
 
@@ -610,7 +701,7 @@ func layout(g *gocui.Gui) error {
 		}
 		v.Title = "Request Body"
 		v.Wrap = true
-		v.Autoscroll = true
+		v.Autoscroll = false
 		v.Editable = true
 	}
 
@@ -663,7 +754,7 @@ func histLayout(g *gocui.Gui) error {
 		}
 		v.Title = "Response Body"
 		v.Wrap = true
-		v.Autoscroll = true
+		v.Autoscroll = false
 		v.Editable = true
 	}
 
@@ -687,7 +778,7 @@ func histLayout(g *gocui.Gui) error {
 		}
 		v.Title = "Request Headers"
 		v.Wrap = true
-		v.Autoscroll = true
+		v.Autoscroll = false
 		v.Editable = true
 	}
 
@@ -699,7 +790,7 @@ func histLayout(g *gocui.Gui) error {
 		}
 		v.Title = "Request Body"
 		v.Wrap = true
-		v.Autoscroll = true
+		v.Autoscroll = false
 		v.Editable = true
 	}
 
