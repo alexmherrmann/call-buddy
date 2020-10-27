@@ -338,7 +338,7 @@ func evalCmdLine(g *gocui.Gui) {
 		fallthrough
 	case command == "help":
 		message := help(argv)
-		updateResponseBodyView(rspBodyView, message)
+		updateResponseBodyView(g, rspBodyView, message)
 
 	case command == ">":
 		if len(argv) < 2 {
@@ -349,14 +349,14 @@ func evalCmdLine(g *gocui.Gui) {
 	case command == "env":
 		if len(argv) < 2 {
 			env := dumpEnvironment("")
-			updateResponseBodyView(rspBodyView, env)
+			updateResponseBodyView(g, rspBodyView, env)
 		} else if strings.Contains(argv[1], "=") {
 			for _, kv := range argv[1:] {
 				addUserEnvironmentVariable(kv)
 			}
 		} else {
 			env := dumpEnvironment(argv[1])
-			updateResponseBodyView(rspBodyView, env)
+			updateResponseBodyView(g, rspBodyView, env)
 		}
 		updateCommandLineView(cmdLineView, "")
 
@@ -373,13 +373,13 @@ func evalCmdLine(g *gocui.Gui) {
 		// FIXME DG: Split out these calls into individual commands
 		// Assume is a call
 		if len(argv) < 2 {
-			updateResponseBodyView(rspBodyView, "Invalid Usage: <call-type> <url>")
+			updateResponseBodyView(g, rspBodyView, "Invalid Usage: <call-type> <url>")
 			break
 		}
 		url := argv[1]
 		if historicalCall, err = call(command, url, requestBodyBuffer); err != nil {
 			// Print error out in place of response body
-			updateResponseBodyView(rspBodyView, err.Error())
+			updateResponseBodyView(g, rspBodyView, err.Error())
 			return
 		}
 		globalTelephonoState.History.AddFinishedCall(historicalCall)
@@ -390,16 +390,25 @@ func evalCmdLine(g *gocui.Gui) {
 
 func updateViewsWithCall(g *gocui.Gui, call t.HistoricalCall) {
 	// Print out new response
-	rspBodyView, _ := g.View(RSP_BODY_VIEW)
-	responseBody := call.Response.String()
-	updateResponseBodyView(rspBodyView, responseBody)
 
-	// Update the request views
-	methodBodyView, _ := g.View(MTD_BODY_VIEW)
-	updateMethodBodyView(methodBodyView, call.Request.URL, call.Request.Method)
+	g.Update(func(gui *gocui.Gui) error {
+		rspBodyView, _ := gui.View(RSP_BODY_VIEW)
+		responseBody := call.Response.String()
+		updateResponseBodyView(g, rspBodyView, responseBody)
+		return nil
+	})
+	g.Update(func(gui *gocui.Gui) error {
+		// Update the request views
+		methodBodyView, _ := gui.View(MTD_BODY_VIEW)
+		updateMethodBodyView(methodBodyView, call.Request.URL, call.Request.Method)
+		return nil
+	})
 
-	requestHeaderView, _ := g.View(RQT_HEAD_VIEW)
-	updateRequestHeaderView(requestHeaderView, call.Request.Header)
+	g.Update(func(gui *gocui.Gui) error {
+		requestHeaderView, _ := gui.View(RQT_HEAD_VIEW)
+		updateRequestHeaderView(requestHeaderView, call.Request.Header)
+		return nil
+	})
 }
 
 func setView(gui *gocui.Gui, name string, state ViewState) {
@@ -523,8 +532,9 @@ func updateRequestBodyView(view *gocui.View, body string) {
 	fmt.Fprint(view, body)
 }
 
-func updateResponseBodyView(view *gocui.View, body string) {
+func updateResponseBodyView(g *gocui.Gui, view *gocui.View, body string) {
 	view.Clear()
+	fmt.Fprint(view, "")
 	fmt.Fprint(view, body)
 }
 
@@ -733,6 +743,12 @@ func setKeybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding(CMD_LINE_VIEW, gocui.KeyEnter, gocui.ModNone, cmdOnEnter); err != nil {
 		log.Panicln(err)
 	}
+	if err := g.SetKeybinding(CMD_LINE_VIEW, gocui.KeyEnd, gocui.ModNone, endOfLine); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding(CMD_LINE_VIEW, gocui.KeyHome, gocui.ModNone, startOfLine); err != nil {
+		log.Panicln(err)
+	}
 
 	// History View Keybindings
 	if err := g.SetKeybinding(HIST_VIEW, gocui.KeyArrowDown, gocui.ModNone, histArrowDown); err != nil {
@@ -871,6 +887,24 @@ func histArrowDown(gui *gocui.Gui, view *gocui.View) error {
 // cmdOnEnter Evaluates the command line
 func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
 	evalCmdLine(g)
+	return nil
+}
+
+//Function to handle going to the end of a command line
+func endOfLine(gui *gocui.Gui, view *gocui.View) error {
+	winSize, _ := view.Size()
+	bufSize := len(view.Buffer()) - 1
+	if bufSize > winSize {
+		view.SetOrigin(bufSize-winSize, 0)
+		bufSize = winSize - 1
+	}
+	view.SetCursor(bufSize, 0)
+	return nil
+}
+
+//Function to handle going to the start of a command line
+func startOfLine(gui *gocui.Gui, view *gocui.View) error {
+	view.SetCursor(0, 0)
 	return nil
 }
 
