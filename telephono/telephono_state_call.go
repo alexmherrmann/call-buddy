@@ -27,7 +27,7 @@ type (
 	}
 )
 
-func (request *Request) Populate(httpRequest *http.Request) error {
+func (request *Request) Populate(httpRequest *http.Request, body string) error {
 	method, err := toHttpMethod(httpRequest.Method)
 	if err != nil {
 		return err
@@ -36,13 +36,7 @@ func (request *Request) Populate(httpRequest *http.Request) error {
 	request.URL = httpRequest.URL.String()
 	request.Header = httpRequest.Header
 
-	request.Body = []byte("")
-	bodyBuffer, err := ioutil.ReadAll(httpRequest.Body)
-	if err != nil {
-		return err
-	}
-	httpRequest.Body.Close()
-	request.Body = bodyBuffer
+	request.Body = []byte(body)
 	return nil
 }
 

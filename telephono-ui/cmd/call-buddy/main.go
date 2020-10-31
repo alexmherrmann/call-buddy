@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	t "github.com/call-buddy/call-buddy/telephono"
-	//"github.com/jroimartin/gocui"
 	"github.com/call-buddy/gocui"
 )
 
@@ -651,16 +650,16 @@ func layout(g *gocui.Gui) error {
 	// Call-Buddy Title
 	titleYStart := 0
 	titleYEnd := titleYStart + 2
-	if v, err := g.SetView(TTL_LINE_VIEW, 0, titleYStart, verticalSplitX, titleYEnd); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(TTL_LINE_VIEW, 0, titleYStart, verticalSplitX, titleYEnd, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		fmt.Fprint(v, "\u001b[32mTerminal "+"\u001b[29mCall "+"\u001b[29mBuddy")
 	}
 
 	// Response Body (e.g. html)
-	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, titleYStart, realMaxX, horizontalSplitY); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, titleYStart, realMaxX, horizontalSplitY, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Title = "Response Body"
@@ -672,8 +671,8 @@ func layout(g *gocui.Gui) error {
 	// Method Body (e.g. GET, PUT, HEAD...)
 	methodBodyYStart := titleYEnd + 1
 	methodBodyYEnd := methodBodyYStart + 10
-	if v, err := g.SetView(MTD_BODY_VIEW, 0, methodBodyYStart, verticalSplitX, methodBodyYEnd); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(MTD_BODY_VIEW, 0, methodBodyYStart, verticalSplitX, methodBodyYEnd, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Title = "Method Body"
@@ -683,8 +682,8 @@ func layout(g *gocui.Gui) error {
 	// Request Headers (e.g. Content-type: text/json)
 	requestHeadersYStart := methodBodyYEnd + 1
 	requestHeadersYEnd := requestHeadersYStart + 6
-	if v, err := g.SetView(RQT_HEAD_VIEW, 0, requestHeadersYStart, verticalSplitX, requestHeadersYEnd); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(RQT_HEAD_VIEW, 0, requestHeadersYStart, verticalSplitX, requestHeadersYEnd, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Title = "Request Headers"
@@ -695,8 +694,8 @@ func layout(g *gocui.Gui) error {
 
 	// Request Body (e.g. json: {})
 	requestBodyYStart := requestHeadersYEnd + 1
-	if v, err := g.SetView(RQT_BODY_VIEW, 0, requestBodyYStart, verticalSplitX, horizontalSplitY); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(RQT_BODY_VIEW, 0, requestBodyYStart, verticalSplitX, horizontalSplitY, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Title = "Request Body"
@@ -706,15 +705,14 @@ func layout(g *gocui.Gui) error {
 	}
 
 	// Command Line (e.g. :get http://httpbin.org/get)
-	if v, err := g.SetView(CMD_LINE_VIEW, 0, horizontalSplitY+1, realMaxX, realMaxY); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(CMD_LINE_VIEW, 0, horizontalSplitY+1, realMaxX, realMaxY, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Wrap = false
 		v.Editable = true
 		v.Autoscroll = false
 	}
-
 	return nil
 }
 
@@ -728,8 +726,8 @@ func histLayout(g *gocui.Gui) error {
 	// Call-Buddy Title
 	titleYStart := 0
 	titleYEnd := titleYStart + 2
-	if v, err := g.SetView(TTL_LINE_VIEW, 0, titleYStart, verticalSplitX, titleYEnd); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(TTL_LINE_VIEW, 0, titleYStart, verticalSplitX, titleYEnd, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		fmt.Fprint(v, "\u001b[32mTerminal "+"\u001b[29mCall "+"\u001b[29mBuddy")
@@ -737,8 +735,8 @@ func histLayout(g *gocui.Gui) error {
 
 	historyYEnd := titleYStart + 6
 	//History View
-	if v, err := g.SetView(HIST_VIEW, verticalSplitX+1, titleYStart, realMaxX, historyYEnd); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(HIST_VIEW, verticalSplitX+1, titleYStart, realMaxX, historyYEnd, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Title = "History"
@@ -748,8 +746,8 @@ func histLayout(g *gocui.Gui) error {
 	}
 
 	// Response Body (e.g. html)
-	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, historyYEnd+1, realMaxX, horizontalSplitY); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(RSP_BODY_VIEW, verticalSplitX+1, historyYEnd+1, realMaxX, horizontalSplitY, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Title = "Response Body"
@@ -761,8 +759,8 @@ func histLayout(g *gocui.Gui) error {
 	// Method Body (e.g. GET, PUT, HEAD...)
 	methodBodyYStart := titleYEnd + 1
 	methodBodyYEnd := methodBodyYStart + 10
-	if v, err := g.SetView(MTD_BODY_VIEW, 0, methodBodyYStart, verticalSplitX, methodBodyYEnd); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(MTD_BODY_VIEW, 0, methodBodyYStart, verticalSplitX, methodBodyYEnd, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Title = "Method Body"
@@ -772,8 +770,8 @@ func histLayout(g *gocui.Gui) error {
 	// Request Headers (e.g. Content-type: text/json)
 	requestHeadersYStart := methodBodyYEnd + 1
 	requestHeadersYEnd := requestHeadersYStart + 6
-	if v, err := g.SetView(RQT_HEAD_VIEW, 0, requestHeadersYStart, verticalSplitX, requestHeadersYEnd); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(RQT_HEAD_VIEW, 0, requestHeadersYStart, verticalSplitX, requestHeadersYEnd, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Title = "Request Headers"
@@ -784,8 +782,8 @@ func histLayout(g *gocui.Gui) error {
 
 	// Request Body (e.g. json: {})
 	requestBodyYStart := requestHeadersYEnd + 1
-	if v, err := g.SetView(RQT_BODY_VIEW, 0, requestBodyYStart, verticalSplitX, horizontalSplitY); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(RQT_BODY_VIEW, 0, requestBodyYStart, verticalSplitX, horizontalSplitY, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Title = "Request Body"
@@ -795,8 +793,8 @@ func histLayout(g *gocui.Gui) error {
 	}
 
 	// Command Line (e.g. :get http://httpbin.org/get)
-	if v, err := g.SetView(CMD_LINE_VIEW, 0, horizontalSplitY+1, realMaxX, realMaxY); err != nil {
-		if err != gocui.ErrUnknownView {
+	if v, err := g.SetView(CMD_LINE_VIEW, 0, horizontalSplitY+1, realMaxX, realMaxY, 0); err != nil {
+		if !gocui.IsUnknownView(err) {
 			return err
 		}
 		v.Wrap = false
@@ -867,7 +865,7 @@ func main() {
 	}
 
 	//Setting up a new TUI
-	g, err := gocui.NewGui(gocui.OutputNormal)
+	g, err := gocui.NewGui(gocui.OutputNormal, false)
 	if err != nil {
 		log.Panicln(err)
 	}
