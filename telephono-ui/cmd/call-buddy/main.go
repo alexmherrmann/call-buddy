@@ -426,7 +426,7 @@ func evalCmdLine(g *gocui.Gui) {
 		fallthrough
 	case command == "help":
 		message := help(argv)
-		updateResponseBodyView(g, rspBodyView, message)
+		updateResponseBodyView(rspBodyView, message)
 
 	case command == ">":
 		if len(argv) < 2 {
@@ -437,14 +437,14 @@ func evalCmdLine(g *gocui.Gui) {
 	case command == "env":
 		if len(argv) < 2 {
 			env := dumpEnvironment("")
-			updateResponseBodyView(g, rspBodyView, env)
+			updateResponseBodyView(rspBodyView, env)
 		} else if strings.Contains(argv[1], "=") {
 			for _, kv := range argv[1:] {
 				addUserEnvironmentVariable(kv)
 			}
 		} else {
 			env := dumpEnvironment(argv[1])
-			updateResponseBodyView(g, rspBodyView, env)
+			updateResponseBodyView(rspBodyView, env)
 		}
 		updateCommandLineView(cmdLineView, "")
 
@@ -461,13 +461,13 @@ func evalCmdLine(g *gocui.Gui) {
 		// FIXME DG: Split out these calls into individual commands
 		// Assume is a call
 		if len(argv) < 2 {
-			updateResponseBodyView(g, rspBodyView, "Invalid Usage: <call-type> <url>")
+			updateResponseBodyView(rspBodyView, "Invalid Usage: <call-type> <url>")
 			break
 		}
 		url := argv[1]
 		if historicalCall, err = call(command, url, requestBodyBuffer); err != nil {
 			// Print error out in place of response body
-			updateResponseBodyView(g, rspBodyView, err.Error())
+			updateResponseBodyView(rspBodyView, err.Error())
 			return
 		}
 		globalTelephonoState.History.AddFinishedCall(historicalCall)
@@ -482,7 +482,7 @@ func updateViewsWithCall(g *gocui.Gui, call t.HistoricalCall) {
 	g.Update(func(gui *gocui.Gui) error {
 		rspBodyView, _ := gui.View(RSP_BODY_VIEW)
 		responseBody := call.Response.String()
-		updateResponseBodyView(g, rspBodyView, responseBody)
+		updateResponseBodyView(rspBodyView, responseBody)
 		return nil
 	})
 	g.Update(func(gui *gocui.Gui) error {
@@ -621,7 +621,7 @@ func updateRequestBodyView(view *gocui.View, body string) {
 	fmt.Fprint(view, body)
 }
 
-func updateResponseBodyView(g *gocui.Gui, view *gocui.View, body string) {
+func updateResponseBodyView(view *gocui.View, body string) {
 	view.Clear()
 	fmt.Fprint(view, "")
 	fmt.Fprint(view, body)
