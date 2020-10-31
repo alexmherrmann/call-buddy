@@ -220,6 +220,14 @@ func dumpEnvironment(name string) (output string) {
 
 // helpMessages A mapping between commands and their help messages.
 var helpMessages map[string]string = map[string]string{
+	"exit": `
+Usage: exit
+
+Closes the application with an exit code of 0.
+
+Aliases:
+	q, quit
+`,
 	"!": `
 Usage: ! SHELL-COMMAND
 
@@ -272,6 +280,9 @@ Stores the given key value header in the request header view.
 Usage: help [COMMAND]
 
 Provides help on call-buddy and on specific commands.
+
+Aliases:
+	?
 `,
 	"history": `
 Usage: history
@@ -312,6 +323,7 @@ Issues a HEAD request.
 // important.
 var helpMessagesOrder []string = []string{
 	"help",
+	"exit",
 	"get",
 	"post",
 	"put",
@@ -396,10 +408,9 @@ func bang(argv []string, input string) string {
 	return string(output)
 }
 
-func evalCmdLine(g *gocui.Gui) {
+func evalCmdLine(g *gocui.Gui) (err error) {
 	var historicalCall t.HistoricalCall
-	var err error
-
+	err = nil
 	// FIXME: Deal with errors!
 	cmdLineView, _ := g.View(CMD_LINE_VIEW)
 	rspBodyView, _ := g.View(RSP_BODY_VIEW)
@@ -450,6 +461,13 @@ func evalCmdLine(g *gocui.Gui) {
 
 	case command == "history":
 		enterHistoryView(g)
+	case command == "q":
+		fallthrough
+	case command == "quit":
+		fallthrough
+	case command == "exit":
+		err = gocui.ErrQuit
+		return
 
 	case command == "header":
 		if len(argv) < 2 {
@@ -474,6 +492,7 @@ func evalCmdLine(g *gocui.Gui) {
 		globalTelephonoState.Save(stateFilepath)
 		updateViewsWithCall(g, historicalCall)
 	}
+	return
 }
 
 func updateViewsWithCall(g *gocui.Gui, call t.HistoricalCall) {
@@ -813,9 +832,6 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 func setKeybindings(g *gocui.Gui) error {
 
 	// Global Keybindings
-	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
-		log.Panicln(err)
-	}
 	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchNextView); err != nil {
 		log.Panicln(err)
 	}
@@ -835,11 +851,15 @@ func setKeybindings(g *gocui.Gui) error {
 		log.Panicln(err)
 	}
 
+	//Unix only keybindings
 	if runtime.GOOS != "windows" {
 		if err := g.SetKeybinding("", gocui.KeyCtrlE, gocui.ModNone, endOfLine); err != nil {
 			log.Panicln(err)
 		}
 		if err := g.SetKeybinding("", gocui.KeyCtrlA, gocui.ModNone, startOfLine); err != nil {
+			log.Panicln(err)
+		}
+		if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
 			log.Panicln(err)
 		}
 	}
@@ -987,8 +1007,7 @@ func histArrowDown(gui *gocui.Gui, view *gocui.View) error {
 
 // cmdOnEnter Evaluates the command line
 func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
-	evalCmdLine(g)
-	return nil
+	return evalCmdLine(g)
 }
 
 //Function to handle going to the end of a command line
