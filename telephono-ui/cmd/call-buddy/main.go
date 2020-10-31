@@ -420,7 +420,7 @@ func evalCmdLine(g *gocui.Gui) {
 		rest := strings.Join(argv[1:], " ")
 		message := bang([]string{command, rest}, rspBodyView.Buffer())
 		rspBodyView, _ := g.View(RSP_BODY_VIEW)
-		updateResponseBodyView(g, rspBodyView, message)
+		updateResponseBodyView(rspBodyView, message)
 
 	case command == "?": // Just in case people get confused
 		fallthrough
