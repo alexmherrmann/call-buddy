@@ -12,7 +12,11 @@ sync() {
 }
 syncup() {
     echo "Syncing up the state and files..." > /dev/stderr
-    rsync -av "state.json" $@ "$target:~/.call-buddy/" >> sync.log
+    if [ -f "state.json" ]; then
+        rsync -av "state.json" $@ "$target:~/.call-buddy/" >> sync.log
+    else
+        rsync -av $@ "$target:~/.call-buddy/" >> sync.log
+    fi
 }
 die() {
     echo "$@" > /dev/stderr
