@@ -420,7 +420,7 @@ func evalCmdLine(g *gocui.Gui) {
 		rest := strings.Join(argv[1:], " ")
 		message := bang([]string{command, rest}, rspBodyView.Buffer())
 		rspBodyView, _ := g.View(RSP_BODY_VIEW)
-		updateResponseBodyView(rspBodyView, message)
+		updateResponseBodyView(g, rspBodyView, message)
 
 	case command == "?": // Just in case people get confused
 		fallthrough
@@ -825,17 +825,29 @@ func setKeybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("", gocui.KeyF2, gocui.ModNone, setCommandView); err != nil {
 
 	}
+	if err := g.SetKeybinding("", gocui.KeyEnd, gocui.ModNone, endOfLine); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("", gocui.KeyHome, gocui.ModNone, startOfLine); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("", gocui.KeyCtrlU, gocui.ModNone, clearLine); err != nil {
+		log.Panicln(err)
+	}
+
+	if runtime.GOOS != "windows" {
+		if err := g.SetKeybinding("", gocui.KeyCtrlE, gocui.ModNone, endOfLine); err != nil {
+			log.Panicln(err)
+		}
+		if err := g.SetKeybinding("", gocui.KeyCtrlA, gocui.ModNone, startOfLine); err != nil {
+			log.Panicln(err)
+		}
+	}
 
 	// View-Specific Keybindings:
 
 	// Command View Keybindings
 	if err := g.SetKeybinding(CMD_LINE_VIEW, gocui.KeyEnter, gocui.ModNone, cmdOnEnter); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(CMD_LINE_VIEW, gocui.KeyEnd, gocui.ModNone, endOfLine); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(CMD_LINE_VIEW, gocui.KeyHome, gocui.ModNone, startOfLine); err != nil {
 		log.Panicln(err)
 	}
 
@@ -981,19 +993,19 @@ func cmdOnEnter(g *gocui.Gui, v *gocui.View) error {
 
 //Function to handle going to the end of a command line
 func endOfLine(gui *gocui.Gui, view *gocui.View) error {
-	winSize, _ := view.Size()
-	bufSize := len(view.Buffer()) - 1
-	if bufSize > winSize {
-		view.SetOrigin(bufSize-winSize, 0)
-		bufSize = winSize - 1
-	}
-	view.SetCursor(bufSize, 0)
+	view.EditGotoToEndOfLine()
 	return nil
 }
 
 //Function to handle going to the start of a command line
 func startOfLine(gui *gocui.Gui, view *gocui.View) error {
-	view.SetCursor(0, 0)
+	view.EditGotoToStartOfLine()
+	return nil
+}
+
+//Deletes the current text in the view
+func clearLine(gui *gocui.Gui, view *gocui.View) error {
+	view.EditDeleteToStartOfLine()
 	return nil
 }
 
