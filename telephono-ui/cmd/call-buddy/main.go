@@ -120,10 +120,19 @@ func die(msg string) {
 }
 
 // saveResponseToFile Save response body to a file
-func saveResponseToFile(contents, filepath string) {
-	fd, _ := os.Create(filepath)
+func saveResponseToFile(contents, filepath string, appendToFile bool) (err error) {
+	var fd *os.File
+	if appendToFile {
+		fd, err = os.OpenFile(filepath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	} else {
+		fd, err = os.Create(filepath)
+	}
+	if err != nil {
+		return
+	}
 	defer fd.Close()
 	fd.WriteString(contents)
+	return
 }
 
 func addUserEnvironmentVariable(kv string) {
@@ -265,6 +274,11 @@ Usage: > FILE
 
 Saves the call response to the given file (and overrides the contents).
 `,
+	">>": `
+Usage: >> FILE
+
+Saves and appends the call response to the given file.
+`,
 	"env": `
 Usage: env [KEY=VALUE] ...
 
@@ -320,7 +334,7 @@ Issues a HEAD request.
 
 // helpMessagesOrder The order to display the help messages in since go
 // randomizes iteration order. Also, not alphabetical since 'help' is more
-// important.
+// important among other things.
 var helpMessagesOrder []string = []string{
 	"help",
 	"exit",
@@ -333,6 +347,7 @@ var helpMessagesOrder []string = []string{
 	"history",
 	"env",
 	">",
+	">>",
 	"!",
 }
 
@@ -410,6 +425,7 @@ func bang(argv []string, input string) string {
 
 func evalCmdLine(g *gocui.Gui) (err error) {
 	var historicalCall t.HistoricalCall
+	var appendToFile bool
 	err = nil
 	// FIXME: Deal with errors!
 	cmdLineView, _ := g.View(CMD_LINE_VIEW)
@@ -440,10 +456,14 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		updateResponseBodyView(rspBodyView, message)
 
 	case command == ">":
+		appendToFile = false
+		fallthrough
+	case command == ">>":
+		appendToFile = true
 		if len(argv) < 2 {
 			break
 		}
-		saveResponseToFile(rspBodyView.Buffer(), argv[1])
+		saveResponseToFile(rspBodyView.Buffer(), argv[1], appendToFile)
 
 	case command == "env":
 		if len(argv) < 2 {
