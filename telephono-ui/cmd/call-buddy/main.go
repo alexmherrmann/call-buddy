@@ -1016,6 +1016,7 @@ func histOnEnter(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		cmd = ""
 	}
+	updateViewsWithCall(g, historicalCall)
 
 	cmd = generateCommand(historicalCall)
 	cmdView, _ := g.View(CMD_LINE_VIEW)
