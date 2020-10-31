@@ -7,6 +7,8 @@ github.com/call-buddy/gocui v0.0.0-20201026054931-7fb03f0c8e0f h1:NkG6pNLgZ/5W96
 github.com/call-buddy/gocui v0.0.0-20201026054931-7fb03f0c8e0f/go.mod h1:A0UzLfVBk5s7fWWrzspauxnqyQD6Cj8/OO10xEubN8Q=
 github.com/call-buddy/gocui v0.0.0-20201031181903-41a078ea385b h1:9bb7tR6vFfA3zunMburT5jBn9TxGK/nsoh2nfg2fDV4=
 github.com/call-buddy/gocui v0.0.0-20201031181903-41a078ea385b/go.mod h1:A0UzLfVBk5s7fWWrzspauxnqyQD6Cj8/OO10xEubN8Q=
+github.com/call-buddy/gocui v0.0.0-20201031210726-5b2d4e262c2b h1:dOTSzser26DFwhcJFpbDKIbZj2H98Cz+RQKam7yF+6c=
+github.com/call-buddy/gocui v0.0.0-20201031210726-5b2d4e262c2b/go.mod h1:A0UzLfVBk5s7fWWrzspauxnqyQD6Cj8/OO10xEubN8Q=
 github.com/call-buddy/gocui v0.5.0 h1:gxV8iS9zR5+pG6j9TKxzEhmlu0c1CmgZ2mNFdJACNe0=
 github.com/call-buddy/gocui v0.5.0/go.mod h1:9/yHCetZNJn/0uR2juEA5Mtvmmx066Jq6m1kgfdgpM4=
 github.com/cbroglie/mustache v1.0.1 h1:ivMg8MguXq/rrz2eu3tw6g3b16+PQhoTn6EZAhst2mw=

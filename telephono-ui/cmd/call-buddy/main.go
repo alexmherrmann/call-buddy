@@ -879,6 +879,9 @@ func setKeybindings(g *gocui.Gui) error {
 		if err := g.SetKeybinding("", gocui.KeyCtrlA, gocui.ModNone, startOfLine); err != nil {
 			log.Panicln(err)
 		}
+		if err := g.SetKeybinding("", gocui.KeyCtrlW, gocui.ModNone, clearWord); err != nil {
+			log.Panicln(err)
+		}
 		if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
 			log.Panicln(err)
 		}
@@ -1045,6 +1048,12 @@ func startOfLine(gui *gocui.Gui, view *gocui.View) error {
 //Deletes the current text in the view
 func clearLine(gui *gocui.Gui, view *gocui.View) error {
 	view.EditDeleteToStartOfLine()
+	return nil
+}
+
+//Deletes the current word in the view
+func clearWord(gui *gocui.Gui, view *gocui.View) error {
+	view.EditDeleteToBeforeWord() // call-buddy specific feature of gocui
 	return nil
 }
 
