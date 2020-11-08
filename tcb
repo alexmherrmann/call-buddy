@@ -90,7 +90,7 @@ fi
 echo "Syncing $local_arch_dir/$arch/call-buddy to $target:$remote_tmp_dir/call-buddy..." > /dev/stderr
 remote_call_buddy="$target:$remote_tmp_dir/call-buddy"
 ssh "$target" "mkdir -p $remote_tmp_dir"
-if ! rsync -av "$local_arch_call_buddy" "$remote_call_buddy" >> sync.log; then
+if ! scp "$local_arch_call_buddy" "$remote_call_buddy" >> sync.log; then
     die "Failed to sync '$local_arch_call_buddy' to '$remote_call_buddy'"
 fi
 
