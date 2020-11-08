@@ -17,7 +17,6 @@
 #
 # Author: Dylan Gardner <dylan.gardner@utah.edu>
 # Usage: ./tcb [USER@HOST] file...
-set -e
 sync_interval=3
 remote_tmp_dir="~/.call-buddy"
 
