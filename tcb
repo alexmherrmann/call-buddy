@@ -25,7 +25,7 @@ syncdown() {
     while true; do
         # Sync down
         rsync -av --exclude "call-buddy" "$target:$remote_tmp_dir/" "$(pwd)" >> sync.log
-        if ! test $? -eq 0; then
+        if test $? -ne 0; then
             echo "Failed to sync using rsync... continuing without rsync" > /dev/stderr
             return
         fi
@@ -48,6 +48,7 @@ die() {
 find_arch_dir() {
     if [ -d "$TCB_ARCH_DIR" ]; then
         echo "$TCB_ARCH_DIR"
+        return
     fi
 
     call_buddy_path="$(command -v call-buddy)"
@@ -57,10 +58,11 @@ find_arch_dir() {
     call_buddy_prefix="$(dirname "$(dirname "$call_buddy_path")")"
     # We install the arch dir at $prefix/lib/call-buddy
     maybe_tcb_arch_dir="$call_buddy_prefix/lib/call-buddy"
-    if ! [ -d "$maybe_tcb_arch_dir" ]; then
+    if [ -d "$maybe_tcb_arch_dir" ]; then
         echo "$maybe_tcb_arch_dir"
+        return
     fi
-    die "\$TCB_ARCH_DIR does not exist nor does lib/call-buddy/ exist in 'call-buddy' prefix $call_buddy_prefix."
+    die "\$TCB_ARCH_DIR does not exist nor does lib/call-buddy/ exist in 'call-buddy' prefix: $call_buddy_prefix"
 }
 
 if [ "$1" = "" ]; then
@@ -69,6 +71,9 @@ fi
 target="$1"
 
 local_arch_dir="$(find_arch_dir)"
+if test $? -ne 0; then
+    exit $?
+fi
 
 printf "Looking up architecture..." > /dev/stderr
 arch="$(ssh "$target" "uname -s -m | tr ' ' '-' | tr '[:upper:]' '[:lower:]'")"
@@ -84,7 +89,7 @@ fi
 
 echo "Syncing $local_arch_dir/$arch/call-buddy to $target:$remote_tmp_dir/call-buddy..." > /dev/stderr
 remote_call_buddy="$target:$remote_tmp_dir/call-buddy"
-ssh "$target" "mkdir -p '$remote_tmp_dir'"
+ssh "$target" "mkdir -p $remote_tmp_dir"
 if ! rsync -av "$local_arch_call_buddy" "$remote_call_buddy" >> sync.log; then
     die "Failed to sync '$local_arch_call_buddy' to '$remote_call_buddy'"
 fi
@@ -99,8 +104,8 @@ syncup "$@" "$local_env_file"
 syncdown &
 
 # Kill all child processes (e.g. syncing)
-trap 'trap - SIGTERM && kill -- -$$' INT ERM EXIT
+trap 'trap - TERM && kill -- -$$' INT TERM EXIT
 # Remote that pesky local environment file
 trap 'rm $local_env_file' INT TERM EXIT
 
-ssh -t "$target" "cd \"$remote_tmp_dir\" && ./call-buddy -e \"$local_env_file\""
+ssh -t "$target" "cd $remote_tmp_dir && pwd && ./call-buddy -e \"$local_env_file\""
