@@ -1,4 +1,22 @@
-#!/bin/bash
+#!/bin/sh
+# Given a target UNIX machine, syncs up an appropriate architecture specific
+# 'call-buddy' binary to the target machine and launches the remote binary
+# using ssh.
+#
+# Any additional files given are synced up before launch and all files
+# existing in the remote ~/.call-buddy directory are synced down and updated
+# at regular intervals.
+#
+# The location of the local architecture-specific 'call-buddy' binaries should
+# be put in the $TCB_ARCH_DIR environment variable if they are installed
+# outside of the prefix where 'call-buddy' in the $PATH is located.
+#
+# Sycning requires the 'rsync' utility to be installed on both ends. This
+# script aims to be POSIX compliant to work on any UNIX machine, but no
+# garuantees.
+#
+# Author: Dylan Gardner <dylan.gardner@utah.edu>
+# Usage: ./tcb [USER@HOST] file...
 set -e
 sync() {
     while true; do
