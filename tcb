@@ -18,64 +18,90 @@
 # Author: Dylan Gardner <dylan.gardner@utah.edu>
 # Usage: ./tcb [USER@HOST] file...
 set -e
-sync() {
+sync_interval=3
+remote_tmp_dir="~/.call-buddy"
+
+syncdown() {
+    echo "Syncing down the remote files..." > /dev/stderr
     while true; do
-        rsync -av --exclude "call-buddy" "$target:~/.call-buddy/" `pwd` >> sync.log
+        # Sync down
+        rsync -av --exclude "call-buddy" "$target:$remote_tmp_dir/" "$(pwd)" >> sync.log
         if ! test $? -eq 0; then
             echo "Failed to sync using rsync... continuing without rsync" > /dev/stderr
             return
         fi
-        sleep 3
+        sleep "$sync_interval"
     done
 }
+# Syncs state.json up
 syncup() {
     echo "Syncing up the state and files..." > /dev/stderr
     if [ -f "state.json" ]; then
-        rsync -av "state.json" $@ "$target:~/.call-buddy/" >> sync.log
+        rsync -av "state.json" "$@" "$target:$remote_tmp_dir/" >> sync.log
     else
-        rsync -av $@ "$target:~/.call-buddy/" >> sync.log
+        rsync -av "$@" "$target:$remote_tmp_dir/" >> sync.log
     fi
 }
 die() {
     echo "$@" > /dev/stderr
     exit 1
 }
+find_arch_dir() {
+    if [ -d "$TCB_ARCH_DIR" ]; then
+        echo "$TCB_ARCH_DIR"
+    fi
 
-if [ "$1" == "" ]; then
+    call_buddy_path="$(command -v call-buddy)"
+    # Assuming in a $prefix/bin or something like that, so do something like
+    # the following:
+    # /usr/local/bin/call-buddy (dirname)-> /usr/local/bin (dirname)-> /usr/local
+    call_buddy_prefix="$(dirname "$(dirname "$call_buddy_path")")"
+    # We install the arch dir at $prefix/lib/call-buddy
+    maybe_tcb_arch_dir="$call_buddy_prefix/lib/call-buddy"
+    if ! [ -d "$maybe_tcb_arch_dir" ]; then
+        echo "$maybe_tcb_arch_dir"
+    fi
+    die "\$TCB_ARCH_DIR does not exist nor does lib/call-buddy/ exist in 'call-buddy' prefix $call_buddy_prefix."
+}
+
+if [ "$1" = "" ]; then
     die "No target given"
 fi
 target="$1"
 
-if ! [ -d "$TCB_ARCH_DIR" ]; then
-    die "TCB_ARCH_DIR=\"$TCB_ARCH_DIR\" does not exist"
-fi
+local_arch_dir="$(find_arch_dir)"
 
 printf "Looking up architecture..." > /dev/stderr
-lookup_arch_cmd="uname -s -m | tr ' ' '-' | tr '[:upper:]' '[:lower:]'"
-arch="$(ssh "$target" "$lookup_arch_cmd")"
-if [ "$arch" == "" ]; then
+arch="$(ssh "$target" "uname -s -m | tr ' ' '-' | tr '[:upper:]' '[:lower:]'")"
+if [ "$arch" = "" ]; then
     die "could not lookup architecture of '$target'"
 fi
 echo " found $arch" > /dev/stderr
 
-source_call_buddy="$TCB_ARCH_DIR/$arch/call-buddy"
-if ! [ -x "$source_call_buddy" ]; then
-    die "$arch binary of call-buddy does not exist at '$source_call_buddy'"
+local_arch_call_buddy="$local_arch_dir/$arch/call-buddy"
+if ! [ -x "$local_arch_call_buddy" ]; then
+    die "$arch binary of call-buddy does not exist at '$local_arch_call_buddy'"
 fi
 
-echo "Syncing $TCB_ARCH_DIR/$arch/call-buddy to $target:~/.call-buddy/call-buddy..." > /dev/stderr
-remote_call_buddy="$target:~/.call-buddy/call-buddy"
-ssh "$target" "mkdir -p ~/.call-buddy"
-if ! rsync -av "$source_call_buddy" "$remote_call_buddy" >> sync.log; then
-    die "Failed to sync '$source_call_buddy' to '$remote_call_buddy'"
+echo "Syncing $local_arch_dir/$arch/call-buddy to $target:$remote_tmp_dir/call-buddy..." > /dev/stderr
+remote_call_buddy="$target:$remote_tmp_dir/call-buddy"
+ssh "$target" "mkdir -p '$remote_tmp_dir'"
+if ! rsync -av "$local_arch_call_buddy" "$remote_call_buddy" >> sync.log; then
+    die "Failed to sync '$local_arch_call_buddy' to '$remote_call_buddy'"
 fi
 
+# We want our local environment available in the remote environment, use the
+# -e flag in call-buddy
 local_env_file="$(hostname).env"
 env > "$local_env_file"
 
 shift
-syncup $@ $local_env_file
-sync &
+syncup "$@" "$local_env_file"
+syncdown &
 
-trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
-ssh -t "$target" "cd ~/.call-buddy && ./call-buddy -e $local_env_file"
+# Kill all child processes (e.g. syncing)
+trap 'trap - SIGTERM && kill -- -$$' INT ERM EXIT
+# Remote that pesky local environment file
+trap 'rm $local_env_file' INT TERM EXIT
+
+ssh -t "$target" "cd \"$remote_tmp_dir\" && ./call-buddy -e \"$local_env_file\""
