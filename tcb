@@ -103,9 +103,9 @@ shift
 syncup "$@" "$local_env_file"
 syncdown &
 
-# Kill all child processes (e.g. syncing)
-trap 'trap - TERM && kill -- -$$' INT TERM EXIT
 # Remote that pesky local environment file
-trap 'rm $local_env_file' INT TERM EXIT
+trap 'trap - TERM && rm $local_env_file' INT TERM EXIT
+# Kill all child processes (e.g. syncing)
+trap 'trap - TERM && rm '"$local_env_file"'; kill -- -$$' INT TERM EXIT
 
-ssh -t "$target" "cd $remote_tmp_dir && pwd && ./call-buddy -e \"$local_env_file\""
+ssh -t "$target" "cd $remote_tmp_dir && ./call-buddy -e \"$local_env_file\"; echo 'Removing remote files at $remote_tmp_dir'; rm -r $remote_tmp_dir"
