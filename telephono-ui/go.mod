@@ -7,6 +7,5 @@ replace github.com/call-buddy/call-buddy/telephono => ../telephono
 require (
 	github.com/call-buddy/call-buddy/telephono v0.0.0-00010101000000-000000000000
 	github.com/call-buddy/gocui v0.0.0-20201113194015-496f4fb5d85f
-	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/nsf/termbox-go v0.0.0-20200418040025-38ba6e5628f1 // indirect
 )
