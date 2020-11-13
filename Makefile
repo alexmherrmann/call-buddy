@@ -1,5 +1,5 @@
 SUBDIRS := telephono telephono-ui
-export prefix="/usr"
+export prefix="/usr/local"
 export realprefix=$(abspath $(prefix))
 
 .PHONY: all $(SUBDIRS)
