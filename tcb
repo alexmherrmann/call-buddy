@@ -75,6 +75,19 @@ if test $? -ne 0; then
     exit $?
 fi
 
+printf "Checking if SSH is passwordless... " > /dev/stderr
+if ! $(ssh -o PreferredAuthentications=publickey,hostbased "$target" /bin/true); then
+    # We can't really allow password-based SSH since not only do we require
+    # multiple invocations of SSH-based commands to sync and set up call-buddy
+    # (which would require entering passwords many times), but syncing will
+    # also not work which is half the point of this script.
+    #
+    # This sucks, but I'm not sure of a better way to do this...
+    die "Could not SSH to '$target' without password. Cannot proceed."
+fi
+echo
+
+
 printf "Looking up architecture..." > /dev/stderr
 arch="$(ssh "$target" "uname -s -m | tr ' ' '-' | tr '[:upper:]' '[:lower:]'")"
 if [ "$arch" = "" ]; then
