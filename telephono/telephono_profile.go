@@ -71,7 +71,7 @@ func (profiles *CallBuddyProfiles) Init(dir string) (err error) {
 	}
 
 	if len(*profiles) == 0 {
-		_, err := profiles.New("default")
+		_, err := profiles.New(dir, "default")
 		if err != nil {
 			// FIXME
 			log.Fatalf("Failed to create default profile: %s\n", err)
@@ -106,11 +106,11 @@ func validProfileName(name string) bool {
 	return isValid(name)
 }
 
-func createProfilePath(name string) string {
-	return "state-" + name + ".json"
+func createProfilePath(dir, name string) string {
+	return filepath.Join(dir, "state-"+name+".json")
 }
 
-func (profiles *CallBuddyProfiles) New(name string) (newProfile Profile, err error) {
+func (profiles *CallBuddyProfiles) New(dir, name string) (newProfile Profile, err error) {
 	if !validProfileName(name) {
 		err = NewInvalidProfileError(name)
 		return
@@ -118,7 +118,7 @@ func (profiles *CallBuddyProfiles) New(name string) (newProfile Profile, err err
 	newState := InitNewState()
 	newProfile = Profile{
 		Name:  name,
-		Path:  createProfilePath(name),
+		Path:  createProfilePath(dir, name),
 		State: &newState,
 	}
 
@@ -133,10 +133,12 @@ func (profiles *CallBuddyProfiles) New(name string) (newProfile Profile, err err
 				Body:    "Hello World"}},
 	})
 	*profiles = append(*profiles, &newProfile)
+	profiles.Use(name)
+
 	return
 }
 
-func (profiles *CallBuddyProfiles) Rename(oldName string, newName string) (err error) {
+func (profiles *CallBuddyProfiles) Rename(oldName, newName string) (err error) {
 	if !validProfileName(newName) {
 		err = NewInvalidProfileError(newName)
 		return
@@ -148,7 +150,7 @@ func (profiles *CallBuddyProfiles) Rename(oldName string, newName string) (err e
 	}
 
 	oldPath := oldProfile.Path
-	newPath := createProfilePath(newName)
+	newPath := createProfilePath(filepath.Dir(oldPath), newName)
 	err = os.Rename(oldPath, newPath)
 	return
 }
@@ -168,7 +170,7 @@ func (profiles *CallBuddyProfiles) CurrentState() *CallBuddyState {
 	return (*profiles)[0].State
 }
 
-func (profiles *CallBuddyProfiles) Use(name string) (err error) {
+func (profiles *CallBuddyProfiles) Use(name string) (Profile, error) {
 	for i, selected := range *profiles {
 		if selected.Name == name {
 			// Move the selected one to the front. i.e.
@@ -181,15 +183,18 @@ func (profiles *CallBuddyProfiles) Use(name string) (err error) {
 				}
 			}
 			*profiles = newProfiles
-			return
+			return *selected, nil
 		}
 	}
-	return errors.New("No such profile " + name)
+	return Profile{}, errors.New("No such profile " + name)
 }
 
 func (profiles *CallBuddyProfiles) List() []Profile {
-	// FIXME:
-	return []Profile{}
+	var tempList []Profile
+	for _, selected := range *profiles {
+		tempList = append(tempList, *selected)
+	}
+	return tempList
 }
 
 func (profiles *CallBuddyProfiles) Remove(name string) (err error) {

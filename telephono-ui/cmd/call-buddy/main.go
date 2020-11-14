@@ -28,7 +28,11 @@ func init() {
 	log.Print("Starting up TCB")
 	profiles = &t.CallBuddyProfiles{}
 	stateDir = lookupStateDir()
-	profiles.Init(stateDir)
+	err := profiles.Init(stateDir)
+
+	if err != nil {
+		log.Print("Profile Initialization Error: " + err.Error())
+	}
 }
 
 func lookupStateDir() (dir string) {
@@ -479,6 +483,35 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			updateResponseBodyView(rspBodyView, env)
 		}
 		updateCommandLineView(cmdLineView, "")
+
+	case command == "create":
+		_, err := profiles.New(stateDir, argv[1])
+		if err != nil {
+			updateResponseBodyView(rspBodyView, err.Error())
+		} else {
+			updateResponseBodyView(rspBodyView, "Profile "+argv[1]+" has been created and is now active.")
+			profiles.Save(stateDir)
+		}
+
+	case command == "use":
+		_, err := profiles.Use(argv[1])
+		if err != nil {
+			updateResponseBodyView(rspBodyView, err.Error())
+		} else {
+			updateResponseBodyView(rspBodyView, argv[1]+" is now the current profile.")
+		}
+
+	case command == "profiles":
+		var curList = profiles.List()
+		var tempList string
+		for i, selected := range curList {
+			if i == 0 {
+				tempList += selected.Name + " <-- Current\n"
+			} else {
+				tempList += selected.Name + "\n"
+			}
+		}
+		updateResponseBodyView(rspBodyView, tempList)
 
 	case command == "history":
 		enterHistoryView(g)
