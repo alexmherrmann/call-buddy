@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -14,8 +15,8 @@ import (
 	"github.com/call-buddy/gocui"
 )
 
-var globalTelephonoState *t.CallBuddyState = nil
-var stateFilepath = "state.json"
+var profiles *t.CallBuddyProfiles
+var stateDir string
 
 func init() {
 	if f, err := os.OpenFile("tui.log", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755); err != nil {
@@ -25,26 +26,30 @@ func init() {
 	}
 
 	log.Print("Starting up TCB")
+	profiles = &t.CallBuddyProfiles{}
+	stateDir = lookupStateDir()
+	err := profiles.Init(stateDir)
 
-	createdState := t.InitNewState()
-	globalTelephonoState = &createdState
-	globalTelephonoState.Collections = append(globalTelephonoState.Collections, t.CallBuddyCollection{
-		Name: "Terminal Call-Buddy",
-		RequestTemplates: []*t.RequestTemplate{
-			{
-				Method:  t.Get,
-				Url:     "https://{vars.Host}",
-				Headers: http.Header{},
-				Body:    "Hello World"}},
-	})
+	if err != nil {
+		log.Print("Profile Initialization Error: " + err.Error())
+	}
+}
 
-	log.Printf("Loading state from %s\n", stateFilepath)
-	globalTelephonoState.Load(stateFilepath)
+func lookupStateDir() (dir string) {
+	var err error
+	if dir = os.Getenv("XDG_DATA_HOME"); dir != "" {
+		return
+	}
+	if dir, err = os.UserHomeDir(); err != nil {
+		dir = "./" // Uhh no home dir?! TCB doesn't run on a potato
+	}
+	// Nothin' wrong with sticking this in home dirs right?! \s
+	return filepath.Join(dir, ".call-buddy")
 }
 
 func getCurrentRequestTemplate(state *t.CallBuddyState) *t.RequestTemplate {
 	// DEMO AH: Obviously this is NOT ok
-	return globalTelephonoState.Collections[0].RequestTemplates[0]
+	return profiles.CurrentState().Collections[0].RequestTemplates[0]
 }
 
 type HistView gocui.View
@@ -140,7 +145,7 @@ func addUserEnvironmentVariable(kv string) {
 	if splatted = strings.SplitN(kv, "=", 2); len(splatted) != 2 {
 		return
 	}
-	globalTelephonoState.Environment.User.Set(splatted[0], splatted[1])
+	profiles.CurrentState().Environment.User.Set(splatted[0], splatted[1])
 }
 
 // appendHeaderToView Adds a key=value header to the header view
@@ -151,7 +156,7 @@ func appendHeaderToView(kv string, requestHeaderView *gocui.View) {
 	}
 
 	// We want to set a header
-	headers := getCurrentRequestTemplate(globalTelephonoState).Headers
+	headers := getCurrentRequestTemplate(profiles.CurrentState()).Headers
 	headers[splatted[0]] = append(headers[splatted[0]], splatted[1])
 	updateRequestHeaderView(requestHeaderView, headers)
 }
@@ -162,11 +167,11 @@ func call(methodType, url, body string) (t.HistoricalCall, error) {
 	// TODO AH: Clean up documentation and other places
 	//contentType := "text/plain"
 
-	theTemplate := getCurrentRequestTemplate(globalTelephonoState)
+	theTemplate := getCurrentRequestTemplate(profiles.CurrentState())
 	theTemplate.Method = t.HttpMethod(strings.ToUpper(methodType))
 	theTemplate.Body = body
 	theTemplate.Url = url
-	return theTemplate.Execute(http.DefaultClient, &globalTelephonoState.Environment)
+	return theTemplate.Execute(http.DefaultClient, &profiles.CurrentState().Environment)
 }
 
 func enterHistoryView(g *gocui.Gui) {
@@ -190,8 +195,8 @@ func enterHistoryView(g *gocui.Gui) {
 	})
 
 	g.Update(func(gui *gocui.Gui) error {
-		if globalTelephonoState.History.Size() > 0 {
-			call, _ := globalTelephonoState.History.Get(0)
+		if profiles.CurrentState().History.Size() > 0 {
+			call, _ := profiles.CurrentState().History.Get(0)
 			updateViewsWithCall(gui, call)
 		}
 		return nil
@@ -210,18 +215,18 @@ func exitHistoryView(g *gocui.Gui) {
 
 func dumpEnvironment(name string) (output string) {
 	if name == "User" || name == "" {
-		for key, value := range globalTelephonoState.Environment.User.Mapping {
-			output += fmt.Sprintf("%s.%s=%s\n", globalTelephonoState.Environment.User.Name, key, value)
+		for key, value := range profiles.CurrentState().Environment.User.Mapping {
+			output += fmt.Sprintf("%s.%s=%s\n", profiles.CurrentState().Environment.User.Name, key, value)
 		}
 	}
 	if name == "Var" || name == "" {
-		for key, value := range globalTelephonoState.Environment.OS.Mapping {
-			output += fmt.Sprintf("%s.%s=%s\n", globalTelephonoState.Environment.OS.Name, key, value)
+		for key, value := range profiles.CurrentState().Environment.OS.Mapping {
+			output += fmt.Sprintf("%s.%s=%s\n", profiles.CurrentState().Environment.OS.Name, key, value)
 		}
 	}
 	if name == "Home" || name == "" {
-		for key, value := range globalTelephonoState.Environment.Home.Mapping {
-			output += fmt.Sprintf("%s.%s=%s\n", globalTelephonoState.Environment.Home.Name, key, value)
+		for key, value := range profiles.CurrentState().Environment.Home.Mapping {
+			output += fmt.Sprintf("%s.%s=%s\n", profiles.CurrentState().Environment.Home.Name, key, value)
 		}
 	}
 	return output
@@ -384,13 +389,13 @@ func lookupShell() (shellArgv []string) {
 	// cgo and linking against libc for all cross-compilations. So we'll
 	// use $SHELL instead and then fallback to /bin/sh for non-Windows
 	// systems and PowerShell for our Windows friends
-	shell := globalTelephonoState.Environment.User.Expand("{{User.SHELL}}")
+	shell := profiles.CurrentState().Environment.User.Expand("{{User.SHELL}}")
 	if shell != "" {
 		shellArgv = []string{shell, "-c"}
 		return
 	}
 
-	shell = globalTelephonoState.Environment.OS.Expand("{{Var.SHELL}}")
+	shell = profiles.CurrentState().Environment.OS.Expand("{{Var.SHELL}}")
 	if shell != "" {
 		shellArgv = []string{shell, "-c"}
 		return
@@ -479,6 +484,35 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		}
 		updateCommandLineView(cmdLineView, "")
 
+	case command == "create":
+		_, err := profiles.New(stateDir, argv[1])
+		if err != nil {
+			updateResponseBodyView(rspBodyView, err.Error())
+		} else {
+			updateResponseBodyView(rspBodyView, "Profile "+argv[1]+" has been created and is now active.")
+			profiles.Save(stateDir)
+		}
+
+	case command == "use":
+		_, err := profiles.Use(argv[1])
+		if err != nil {
+			updateResponseBodyView(rspBodyView, err.Error())
+		} else {
+			updateResponseBodyView(rspBodyView, argv[1]+" is now the current profile.")
+		}
+
+	case command == "profiles":
+		var curList = profiles.List()
+		var tempList string
+		for i, selected := range curList {
+			if i == 0 {
+				tempList += selected.Name + " <-- Current\n"
+			} else {
+				tempList += selected.Name + "\n"
+			}
+		}
+		updateResponseBodyView(rspBodyView, tempList)
+
 	case command == "history":
 		enterHistoryView(g)
 	case command == "q":
@@ -508,8 +542,8 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			updateResponseBodyView(rspBodyView, err.Error())
 			return
 		}
-		globalTelephonoState.History.AddFinishedCall(historicalCall)
-		globalTelephonoState.Save(stateFilepath)
+		profiles.CurrentState().History.AddFinishedCall(historicalCall)
+		profiles.Save(stateDir)
 		updateViewsWithCall(g, historicalCall)
 	}
 	return
@@ -669,7 +703,7 @@ func updateResponseBodyView(view *gocui.View, body string) {
 
 func updateHistoryView(view *gocui.View) {
 	view.Clear()
-	histFormat := globalTelephonoState.History.GetSimpleWholeHistoryReport()
+	histFormat := profiles.CurrentState().History.GetSimpleWholeHistoryReport()
 	fmt.Fprint(view, histFormat)
 }
 
@@ -916,7 +950,7 @@ func main() {
 	envFile := flag.String("e", "", "Environment file to load from")
 	flag.Parse()
 	if envFile != nil {
-		globalTelephonoState.Environment.Home.PopulateFromFile(*envFile)
+		profiles.CurrentState().Environment.Home.PopulateFromFile(*envFile)
 	}
 
 	//Setting up a new TUI
@@ -1004,11 +1038,11 @@ func histOnTab(g *gocui.Gui, v *gocui.View) error {
 
 func histArrowUp(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
-	if curY > 0 && globalTelephonoState.History.Size() > 0 {
+	if curY > 0 && profiles.CurrentState().History.Size() > 0 {
 		curY -= 1
 
 		// Show hint for selected history
-		call, _ := globalTelephonoState.History.Get(curY)
+		call, _ := profiles.CurrentState().History.Get(curY)
 		updateViewsWithCall(gui, call)
 	}
 	view.SetCursor(curX, curY)
@@ -1017,11 +1051,11 @@ func histArrowUp(gui *gocui.Gui, view *gocui.View) error {
 
 func histArrowDown(gui *gocui.Gui, view *gocui.View) error {
 	curX, curY := view.Cursor()
-	if curY < globalTelephonoState.History.Size()-1 {
+	if curY < profiles.CurrentState().History.Size()-1 {
 		curY += 1
 
 		// Show hint for selected history
-		call, _ := globalTelephonoState.History.Get(curY)
+		call, _ := profiles.CurrentState().History.Get(curY)
 		updateViewsWithCall(gui, call)
 	}
 	view.SetCursor(curX, curY)
@@ -1070,7 +1104,7 @@ func histOnEnter(g *gocui.Gui, v *gocui.View) error {
 	// into the view
 	_, curY := v.Cursor()
 	var cmd string
-	historicalCall, err := globalTelephonoState.History.Get(curY)
+	historicalCall, err := profiles.CurrentState().History.Get(curY)
 	if err != nil {
 		cmd = ""
 	}
