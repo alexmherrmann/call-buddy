@@ -2,7 +2,7 @@ package telephono
 
 import (
 	"errors"
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,16 +19,23 @@ type Profile struct {
 	State *CallBuddyState
 }
 
-func (profiles *CallBuddyProfiles) Init(dir string) (err error) {
+func (profiles *CallBuddyProfiles) Init(dir string) (ok bool, errs []error) {
 	// First check for errors such as permissions or not existing...
+	ok = true
+	var err error
+
 	_, err = os.Stat(dir)
 	if err != nil {
 		if !os.IsNotExist(err) {
+			errs = append(errs, err)
+			ok = false
 			return
 		}
 		// Let's try and create the directory
 		err = os.MkdirAll(dir, 0755)
 		if err != nil {
+			errs = append(errs, err)
+			ok = false
 			return
 		}
 	}
@@ -41,9 +48,10 @@ func (profiles *CallBuddyProfiles) Init(dir string) (err error) {
 	for _, path := range profileFilepaths {
 		stat, err := os.Stat(path)
 		if err != nil {
-			// FIXME DG: Hey maybe let's _not_ silently ignore bad profiles
+			errs = append(errs, err)
 			continue
 		}
+
 		profileFilepathsCanRead = append(profileFilepathsCanRead, path)
 		profileFilepathsModTime = append(profileFilepathsModTime, stat.ModTime())
 	}
@@ -54,7 +62,7 @@ func (profiles *CallBuddyProfiles) Init(dir string) (err error) {
 	for _, path := range profileFilepathsCanRead {
 		name, err := extractProfileName(path)
 		if err != nil {
-			// FIXME DG: Hey maybe let's _not_ silently ignore bad profile names
+			errs = append(errs, err)
 			continue
 		}
 		profile := Profile{
@@ -64,7 +72,7 @@ func (profiles *CallBuddyProfiles) Init(dir string) (err error) {
 		}
 		err = profile.State.Load(path)
 		if err != nil {
-			// FIXME DG: Hey maybe let's _not_ silently ignore the fact we can't load a profile?
+			errs = append(errs, err)
 			continue
 		}
 		*profiles = append(*profiles, &profile)
@@ -73,8 +81,9 @@ func (profiles *CallBuddyProfiles) Init(dir string) (err error) {
 	if len(*profiles) == 0 {
 		_, err := profiles.New(dir, "default")
 		if err != nil {
-			// FIXME
-			log.Fatalf("Failed to create default profile: %s\n", err)
+			tempErr := fmt.Sprintf("Failed to create default profile: %s", err)
+			errs = append(errs, errors.New(tempErr))
+			ok = false
 		}
 	}
 	return
@@ -93,8 +102,9 @@ func NewInvalidProfileError(name string) InvalidProfileError {
 }
 
 func extractProfileName(path string) (name string, err error) {
-	rest := path[len("state-"):]
-	name = rest[:len(rest)-len(".json")+1]
+	fileName := filepath.Base(path)
+	rest := fileName[len("state-"):]
+	name = rest[:len(rest)-len(".json")]
 	if !validProfileName(name) {
 		return "", NewInvalidProfileError(name)
 	}
@@ -134,6 +144,7 @@ func (profiles *CallBuddyProfiles) New(dir, name string) (newProfile Profile, er
 	})
 	*profiles = append(*profiles, &newProfile)
 	profiles.Use(name)
+	profiles.Save(dir)
 
 	return
 }
@@ -197,7 +208,8 @@ func (profiles *CallBuddyProfiles) List() []Profile {
 	return tempList
 }
 
-func (profiles *CallBuddyProfiles) Remove(name string) (err error) {
+func (profiles *CallBuddyProfiles) Remove(dir, name string) (err error) {
+	var removed bool
 	for i, selected := range *profiles {
 		if selected.Name == name {
 			// Skip the selected one i.e.
@@ -208,11 +220,19 @@ func (profiles *CallBuddyProfiles) Remove(name string) (err error) {
 					newProfiles = append(newProfiles, other)
 				}
 			}
+			err = os.Remove(selected.Path)
 			*profiles = newProfiles
-			return
+			removed = true
 		}
 	}
-	return errors.New("No such profile " + name)
+	if removed {
+		if len(*profiles) == 0 {
+			_, err = profiles.New(dir, "default")
+		}
+	} else {
+		err = errors.New("No such profile " + name)
+	}
+	return
 }
 
 func (profiles *CallBuddyProfiles) Save(dir string) error {

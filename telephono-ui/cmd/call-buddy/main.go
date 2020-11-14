@@ -28,10 +28,15 @@ func init() {
 	log.Print("Starting up TCB")
 	profiles = &t.CallBuddyProfiles{}
 	stateDir = lookupStateDir()
-	err := profiles.Init(stateDir)
-
-	if err != nil {
-		log.Print("Profile Initialization Error: " + err.Error())
+	ok, errs := profiles.Init(stateDir)
+	var tempErrs string
+	for _, err := range errs {
+		tempErrs += err.Error() + "\n"
+	}
+	if !ok {
+		log.Fatalf("Critical Initialization Error(s): \n %s", tempErrs)
+	} else {
+		log.Printf("Non-Critical Initialization Error(s): \n %s", tempErrs)
 	}
 }
 
@@ -490,7 +495,6 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			updateResponseBodyView(rspBodyView, err.Error())
 		} else {
 			updateResponseBodyView(rspBodyView, "Profile "+argv[1]+" has been created and is now active.")
-			profiles.Save(stateDir)
 		}
 
 	case command == "use":
@@ -499,6 +503,27 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			updateResponseBodyView(rspBodyView, err.Error())
 		} else {
 			updateResponseBodyView(rspBodyView, argv[1]+" is now the current profile.")
+		}
+
+	case command == "remove":
+
+		var tempComplete string
+		for _, selected := range argv[1:] {
+			err := profiles.Remove(stateDir, selected)
+			if err != nil {
+				tempComplete += "Failed to remove " + selected + ": " + err.Error() + "\n"
+			} else {
+				tempComplete += "Successfully Removed " + selected + "\n"
+			}
+		}
+		updateResponseBodyView(rspBodyView, tempComplete)
+
+	case command == "rename":
+		err := profiles.Rename(argv[1], argv[2])
+		if err != nil {
+			updateResponseBodyView(rspBodyView, err.Error())
+		} else {
+			updateResponseBodyView(rspBodyView, argv[1]+" is now named "+argv[2])
 		}
 
 	case command == "profiles":
