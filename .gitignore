@@ -4,7 +4,7 @@
 telephono/debug
 telephono/telephono
 cmd/call-buddy
-main.exe
+*.exe
 build/
 /telephono-ui/call-buddy
 launchpad/launchpad
