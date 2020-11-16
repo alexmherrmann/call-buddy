@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -98,7 +99,7 @@ func (e InvalidProfileError) Error() string {
 }
 
 func NewInvalidProfileError(name string) InvalidProfileError {
-	return InvalidProfileError{"Not a valid profile name " + name}
+	return InvalidProfileError{"Not a valid profile name " + name + ". Can only contain a-z, 0-9 and underscores."}
 }
 
 func extractProfileName(path string) (name string, err error) {
@@ -112,7 +113,7 @@ func extractProfileName(path string) (name string, err error) {
 }
 
 func validProfileName(name string) bool {
-	var isValid = regexp.MustCompile(`^[a-z_A-Z0-9]+$`).MatchString
+	var isValid = regexp.MustCompile(`^[a-z_0-9]+$`).MatchString
 	return isValid(name)
 }
 
@@ -121,10 +122,18 @@ func createProfilePath(dir, name string) string {
 }
 
 func (profiles *CallBuddyProfiles) New(dir, name string) (newProfile Profile, err error) {
+	name = strings.ToLower(name)
+
 	if !validProfileName(name) {
 		err = NewInvalidProfileError(name)
 		return
 	}
+	for _, profile := range *profiles {
+		if name == profile.Name {
+			return Profile{}, errors.New("Duplicate profile name " + name)
+		}
+	}
+
 	newState := InitNewState()
 	newProfile = Profile{
 		Name:  name,
@@ -145,14 +154,19 @@ func (profiles *CallBuddyProfiles) New(dir, name string) (newProfile Profile, er
 	*profiles = append(*profiles, &newProfile)
 	profiles.Use(name)
 	profiles.Save(dir)
-
 	return
 }
 
 func (profiles *CallBuddyProfiles) Rename(oldName, newName string) (err error) {
+	oldName = strings.ToLower(oldName)
+	newName = strings.ToLower(newName)
+
 	if !validProfileName(newName) {
 		err = NewInvalidProfileError(newName)
 		return
+	}
+	if oldName == newName {
+		return errors.New("Duplicate profile name " + oldName)
 	}
 
 	oldProfile, err := profiles.Get(oldName)
@@ -167,6 +181,7 @@ func (profiles *CallBuddyProfiles) Rename(oldName, newName string) (err error) {
 }
 
 func (profiles *CallBuddyProfiles) Get(name string) (profile Profile, err error) {
+	name = strings.ToLower(name)
 	for _, selected := range *profiles {
 		if selected.Name == name {
 			profile = *selected
@@ -182,6 +197,8 @@ func (profiles *CallBuddyProfiles) CurrentState() *CallBuddyState {
 }
 
 func (profiles *CallBuddyProfiles) Use(name string) (Profile, error) {
+	name = strings.ToLower(name)
+
 	for i, selected := range *profiles {
 		if selected.Name == name {
 			// Move the selected one to the front. i.e.
@@ -209,6 +226,8 @@ func (profiles *CallBuddyProfiles) List() []Profile {
 }
 
 func (profiles *CallBuddyProfiles) Remove(dir, name string) (err error) {
+	name = strings.ToLower(name)
+
 	var removed bool
 	for i, selected := range *profiles {
 		if selected.Name == name {
