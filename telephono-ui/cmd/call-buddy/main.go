@@ -442,18 +442,24 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 	rspBodyView, _ := g.View(RSP_BODY_VIEW)
 	rqtBodyView, err := g.View(RQT_BODY_VIEW)
 	rqtHeaderView, _ := g.View(RQT_HEAD_VIEW)
-
 	requestBodyBuffer := rqtBodyView.Buffer()
-
-	log.Print(err)
 
 	// Extract the command into an args list
 	rawCommand := strings.TrimSpace(cmdLineView.Buffer())
+	if rawCommand == "" {
+		return
+	}
+
 	argv := strings.Split(rawCommand, " ")
 	command := argv[0]
 
 	switch {
 	case command == "!":
+		if len(argv) < 2 {
+			message := help([]string{"help", command})
+			updateResponseBodyView(rspBodyView, message)
+			break
+		}
 		rest := strings.Join(argv[1:], " ")
 		message := bang([]string{command, rest}, rspBodyView.Buffer())
 		rspBodyView, _ := g.View(RSP_BODY_VIEW)
@@ -471,6 +477,8 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 	case command == ">>":
 		appendToFile = true
 		if len(argv) < 2 {
+			message := help([]string{"help", command})
+			updateResponseBodyView(rspBodyView, message)
 			break
 		}
 		saveResponseToFile(rspBodyView.Buffer(), argv[1], appendToFile)
@@ -490,6 +498,11 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		updateCommandLineView(cmdLineView, "")
 
 	case command == "create":
+		if len(argv) < 2 {
+			message := help([]string{"help", command})
+			updateResponseBodyView(rspBodyView, message)
+			break
+		}
 		_, err := profiles.New(stateDir, argv[1])
 		if err != nil {
 			updateResponseBodyView(rspBodyView, err.Error())
@@ -498,6 +511,11 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		}
 
 	case command == "use":
+		if len(argv) < 2 {
+			message := help([]string{"help", command})
+			updateResponseBodyView(rspBodyView, message)
+			break
+		}
 		_, err := profiles.Use(argv[1])
 		if err != nil {
 			updateResponseBodyView(rspBodyView, err.Error())
@@ -506,6 +524,11 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		}
 
 	case command == "remove":
+		if len(argv) < 2 {
+			message := help([]string{"help", command})
+			updateResponseBodyView(rspBodyView, message)
+			break
+		}
 
 		var tempComplete string
 		for _, selected := range argv[1:] {
@@ -519,6 +542,12 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		updateResponseBodyView(rspBodyView, tempComplete)
 
 	case command == "rename":
+		if len(argv) < 2 {
+			message := help([]string{"help", command})
+			updateResponseBodyView(rspBodyView, message)
+			break
+		}
+
 		err := profiles.Rename(argv[1], argv[2])
 		if err != nil {
 			updateResponseBodyView(rspBodyView, err.Error())
@@ -527,6 +556,12 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		}
 
 	case command == "profiles":
+		if len(argv) < 2 {
+			message := help([]string{"help", command})
+			updateResponseBodyView(rspBodyView, message)
+			break
+		}
+
 		var curList = profiles.List()
 		var tempList string
 		for i, selected := range curList {
@@ -550,12 +585,17 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 
 	case command == "header":
 		if len(argv) < 2 {
+			message := help([]string{"help", command})
+			updateResponseBodyView(rspBodyView, message)
 			break
 		}
 		appendHeaderToView(argv[1], rqtHeaderView)
 
-	default:
-		// FIXME DG: Split out these calls into individual commands
+	case command == "get":
+	case command == "put":
+	case command == "post":
+	case command == "delete":
+	case command == "head":
 		// Assume is a call
 		if len(argv) < 2 {
 			updateResponseBodyView(rspBodyView, "Invalid Usage: <call-type> <url>")
@@ -570,6 +610,9 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		profiles.CurrentState().History.AddFinishedCall(historicalCall)
 		profiles.Save(stateDir)
 		updateViewsWithCall(g, historicalCall)
+
+	default:
+		updateResponseBodyView(rspBodyView, "No such command '"+command+"'. Use help.")
 	}
 	return
 }
