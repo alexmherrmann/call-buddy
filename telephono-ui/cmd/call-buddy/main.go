@@ -238,21 +238,147 @@ func dumpEnvironment(name string) (output string) {
 }
 
 var validProfileNameHelp string = `
-- Must be lower case*
-- Must be a-z or a digit
+- Must be lower case
+- Each character must be within a-z or a digit`
 
-* This is due to some filesystems being case-insensitive.`
+var genericHelp string = `SYNOPSIS
 
-// helpMessages A mapping between commands and their help messages.
-var helpMessages map[string]string = map[string]string{
-	"exit": `Usage: exit
+The bottom view is for inputting commands, much like a shell,
+albeit not quite as fancy. All commands output to the response
+body view if they output anything.
 
+Use the 'get', 'post', 'put' commands with a url to make basic
+HTTP calls. The 'header KEY=VALUE' command can be used to add
+headers in addition to modifying the request header section.
+HTTP calls are saved to a history viewable with the the 'history'
+command. OS environment variables are accessible via the
+{{Vars.NAME}} syntax in the header and body views and viewable
+using the 'env' command. User-defined variables are displayed and
+accessed using the User name via the 'env' command.
+
+ENVIRONMENT
+
+There are three environments within call-buddy. They are called
+'Vars', 'Home' and 'User'. The first is pulled from the OS
+environment call-buddy is running in. The second is usually empty
+unless the -e flag is used; it contains an environment pulled from a
+file. When using the 'tcb' utility, this is used to store the
+environment of the original launching host. The last contains
+user accessible environment variables.
+
+These variables can be accessed within the request header and
+request body using the {{ENV.KEY}} syntax. For example, if
+APIKEY is stored in the OS environment, putting {{Vars.APIKEY}} in
+the request header or request body will result in this being
+expanded and sent in each HTTP request.
+
+To display a particular environment use the 'env' command with the
+name as the second argument. If no environment name is provided, all
+environment variables are printed out.
+
+To set a user-defined environment variable, use the 'env' command
+with KEY=VALUE as the second argument. Quoting is not currently
+supported :(.
+
+PERSISTENCE
+
+When using call-buddy the current state is automatically saved to a
+json file in ~/.call-buddy or $XDG_HOME_DIR if defined. Consider
+this directory to be solely managed by the call-buddy utility, lest
+you risk unexpected errors or issues.
+
+HISTORY
+
+Every HTTP call made is stored internally for later access. Your
+history can be accessed using the 'history' command; doing so opens
+up a hidden view that you can arrow up or down in. Your selection
+temporarily updates the rest of the view with the call. Hitting
+enter makes the update permanent, hitting escape cancels the update.
+Both cause the history view to be exited and hidden again.
+
+PROFILES
+
+If you wish to separate history and environment variables between
+different invocations of the call-buddy command or even within the
+same invocation, you can create and use particular profiles using
+the 'create' and 'use' commands. All the available profiles can be
+shown using the 'profiles' command. To remove or rename a profile,
+the 'remove' and 'rename' commands can be used.
+
+Profile names must be lower case and each character must be in
+a-z or a digit.
+
+COMMANDS
+
+- help [CMD]    Outputs a detailed help message
+- exit, quit    Goodbye.
+- get URL       Issues a http GET request
+- delete URL    Issues a http DELETE request
+- put URL       Issues a http PUT request
+- post URL      Issues a http POST request
+- head URL      Issues a http HEAD request
+- header K=V    Appends a KEY=VALUE pair to the header view
+- history       Enters the history view
+- env [N][K=V]  Outputs one or more named envs or stores a key
+- ! SHELL       Executes the shell command and outputs it
+- > FILE        (Over)writes the output to a file
+- >> FILE       Appends the output to a file
+- profiles      Outputs the available profiles
+- create NAME   Creates a new profile
+- use NAME      Uses the given profile
+- remove NAME   Removes (and deactivates) the given profile
+- rename NAME   Renames the given profile
+
+KEYBINDINGS
+
+- Tab           Switch to the next view.
+- F2            Switch to the command line.
+- Ctrl-Y        Enter/exit the history view.
+- Ctrl-E        Go to end of line (UNIX only).
+- Ctrl-A        Go to start of line (UNIX only).
+- Ctrl-W        Clear a word backwards (UNIX only).
+- Ctrl-U        Clear a line backwards (UNIX only).
+
+CREDITS
+
+This application was built and developed by the Terminal Call-Buddy
+Team at the University of Utah: Dylan Gardner, Alex Herrmann,
+Cooper Pender and Derek Dixon. Credited for the idea goes to Alex
+Herrmann.
+
+END
+
+Thanks for using call-buddy! :^)`
+
+var helpSynopsises map[string]string = map[string]string{
+	"exit":     "exit",
+	"!":        "! SHELL-COMMAND",
+	">":        "> FILE",
+	">>":       ">> FILE",
+	"env":      "env [KEY=VALUE]\nenv [NAME]",
+	"header":   "header KEY=VALUE",
+	"help":     "help [COMMAND]",
+	"history":  "history",
+	"profiles": "profiles",
+	"create":   "create NAME",
+	"remove":   "remove NAME",
+	"use":      "use NAME",
+	"rename":   "rename OLD-NAME NEW-NAME",
+	"post":     "post URL",
+	"get":      "get URL",
+	"put":      "put URL",
+	"delete":   "delete URL",
+	"head":     "head URL",
+}
+
+// helpDescriptions A mapping between commands and their help descriptions.
+var helpDescriptions map[string]string = map[string]string{
+	"exit": `
 Closes the application with an exit code of 0.
 
-Aliases:
+ALIASES
 	q, quit`,
-	"!": `Usage: ! SHELL-COMMAND
-
+	"!": `
 Passes the given shell command(s) to the shell and executes it. The
 response body is piped into the shell's stdin and the shell's stdout
 is captured and updated in place of the response body pane after the
@@ -273,7 +399,9 @@ The shell is choosen and executed in the following manner:
   3. Otherwise, a UNIX system is assumed and /bin/sh is used in the
      manner described for the SHELL environment variable.
 
-Examples (assuming a UNIX system):
+EXAMPLES
+
+Assuming a UNIX system.
 
 ! grep KEY              Filters the response body to only contain
                         lines with 'KEY'
@@ -281,68 +409,52 @@ Examples (assuming a UNIX system):
 ! tail -30 | grep KEY   Filters the response body to only contain
                         the last 30 lines and filters those lines
                         again to those that contain 'KEY'`,
-	">": `Usage: > FILE
-
+	">": `
 Saves the call response to the given file (and overrides the contents).`,
-	">>": `Usage: >> FILE
-
+	">>": `
 Saves and appends the call response to the given file.`,
-	"env": `Usage: env [KEY=VALUE] ...
-
+	"env": `
 Displays the environment or stores the given key value pair in the
 'User' environment. Use {{User.KEY}} to extract the value.`,
-	"header": `Usage: header KEY=VALUE ...
-
+	"header": `
 Stores the given key value header in the request header view.`,
-	"help": `Usage: help [COMMAND]
-
+	"help": `
 Provides help on call-buddy and on specific commands.
 
-Aliases:
-	?`,
-	"history": `Usage: history
-
+ALIASES
+	?, man`,
+	"history": `
 Enters the history view.`,
-	"profiles": `Usage: profiles
-
+	"profiles": `
 Lists the available profiles.`,
-	"create": `Usage: create NAME
-
+	"create": `
 Creates and activates a new profile with the given name. Profiles
 can be removed using the 'remove' command. A valid name is based
 on the following conditions:
 ` + validProfileNameHelp,
-	"remove": `Usage: remove NAME
-
+	"remove": `
 Removes and deactivates the given profile if active. The leftmost
 profile after shown in the 'profiles' command after completion is
 selected. If there are no profiles after completion, a new default
 profile is created.`,
-	"use": `Usage: use NAME
-
+	"use": `
 Deactivates the current profile and activates the requested
 profile.`,
-	"rename": `Usage: rename OLD-NAME NEW-NAME
-
+	"rename": `
 Renames the requested profile name. A valid name is based on the
 following conditions:
 ` + validProfileNameHelp,
-	"post": `Usage: post URL
-
+	"post": `
 Issues a http POST request with the request headers and body in the
 view.`,
-	"get": `Usage: get URL
-
+	"get": `
 Issues a http GET request.`,
-	"put": `Usage: put URL
-
+	"put": `
 Issues a http PUT request with the request headers and body in the
 view.`,
-	"delete": `Usage: delete URL
-
+	"delete": `
 Issues a http DELETE request.`,
-	"head": `Usage: head URL
-
+	"head": `
 Issues a http HEAD request.`,
 }
 
@@ -376,21 +488,16 @@ var helpMessagesOrder []string = []string{
 func help(argv []string) string {
 	// Generic help
 	if len(argv) < 2 {
-		var output string
-		for i, command := range helpMessagesOrder {
-			output += "--- " + command + " ---\n"
-			output += helpMessages[command]
-			if i != len(helpMessages)-1 {
-				output += "\n---\n\n"
-			}
-		}
-		return output
+		return genericHelp
 	}
 	command := argv[1]
 
 	// Specific command help
-	if message, found := helpMessages[command]; found {
-		return message
+	if message, found := helpDescriptions[command]; found {
+		return "SYNOPSIS\n\n" + helpSynopsises[command] + "\n\nDESCRIPTION\n" + message
+	}
+	if argv[0] == "help" && command == "me" {
+		return "Hang in there bud. :)"
 	}
 	return "No documentation for '" + argv[1] + "'"
 }
@@ -474,6 +581,8 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		updateResponseBodyView(rspBodyView, message)
 
 	case "?": // Just in case people get confused
+		fallthrough
+	case "man": // They're _technically_ man pages
 		fallthrough
 	case "help":
 		message := help(argv)
