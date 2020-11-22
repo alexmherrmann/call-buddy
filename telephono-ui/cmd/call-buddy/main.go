@@ -237,18 +237,21 @@ func dumpEnvironment(name string) (output string) {
 	return output
 }
 
+var validProfileNameHelp string = `
+- Must be lower case*
+- Must be a-z or a digit
+
+* This is due to some filesystems being case-insensitive.`
+
 // helpMessages A mapping between commands and their help messages.
 var helpMessages map[string]string = map[string]string{
-	"exit": `
-Usage: exit
+	"exit": `Usage: exit
 
 Closes the application with an exit code of 0.
 
 Aliases:
-	q, quit
-`,
-	"!": `
-Usage: ! SHELL-COMMAND
+	q, quit`,
+	"!": `Usage: ! SHELL-COMMAND
 
 Passes the given shell command(s) to the shell and executes it. The
 response body is piped into the shell's stdin and the shell's stdout
@@ -272,79 +275,80 @@ The shell is choosen and executed in the following manner:
 
 Examples (assuming a UNIX system):
 
-! grep KEY		Filters the response body to only contain
-			lines with 'KEY'
-! ifconfig		Dumps the network interfaces.
-! tail -30 | grep KEY 	Filters the response body to only contain
-			the last 30 lines and filters those lines
-			again to those that contain 'KEY'
-`,
-	">": `
-Usage: > FILE
+! grep KEY              Filters the response body to only contain
+                        lines with 'KEY'
+! ifconfig              Dumps the network interfaces.
+! tail -30 | grep KEY   Filters the response body to only contain
+                        the last 30 lines and filters those lines
+                        again to those that contain 'KEY'`,
+	">": `Usage: > FILE
 
-Saves the call response to the given file (and overrides the contents).
-`,
-	">>": `
-Usage: >> FILE
+Saves the call response to the given file (and overrides the contents).`,
+	">>": `Usage: >> FILE
 
-Saves and appends the call response to the given file.
-`,
-	"env": `
-Usage: env [KEY=VALUE] ...
+Saves and appends the call response to the given file.`,
+	"env": `Usage: env [KEY=VALUE] ...
 
 Displays the environment or stores the given key value pair in the
-'User' environment. Use {{User.KEY}} to extract the value.
-`,
-	"header": `
-Usage: header KEY=VALUE ...
+'User' environment. Use {{User.KEY}} to extract the value.`,
+	"header": `Usage: header KEY=VALUE ...
 
-Stores the given key value header in the request header view.
-`,
-	"help": `
-Usage: help [COMMAND]
+Stores the given key value header in the request header view.`,
+	"help": `Usage: help [COMMAND]
 
 Provides help on call-buddy and on specific commands.
 
 Aliases:
-	?
-`,
-	"history": `
-Usage: history
+	?`,
+	"history": `Usage: history
 
-Enters the history view.
-`,
-	"post": `
-Usage: post [url]
+Enters the history view.`,
+	"profiles": `Usage: profiles
 
-Issues a POST request with the request headers and body in the
-view.
-`,
-	"get": `
-Usage: get [url]
+Lists the available profiles.`,
+	"create": `Usage: create NAME
 
-Issues a GET request.
-`,
-	"put": `
-Usage: put [url]
+Creates and activates a new profile with the given name. Profiles
+can be removed using the 'remove' command. A valid name is based
+on the following conditions:
+` + validProfileNameHelp,
+	"remove": `Usage: remove NAME
 
-Issues a PUT request with the request headers and body in the
-view.
-`,
-	"delete": `
-Usage: delete [url]
+Removes and deactivates the given profile if active. The leftmost
+profile after shown in the 'profiles' command after completion is
+selected. If there are no profiles after completion, a new default
+profile is created.`,
+	"use": `Usage: use NAME
 
-Issues a DELETE request.
-`,
-	"head": `
-Usage: head [url]
+Deactivates the current profile and activates the requested
+profile.`,
+	"rename": `Usage: rename OLD-NAME NEW-NAME
 
-Issues a HEAD request.
-`,
+Renames the requested profile name. A valid name is based on the
+following conditions:
+` + validProfileNameHelp,
+	"post": `Usage: post URL
+
+Issues a http POST request with the request headers and body in the
+view.`,
+	"get": `Usage: get URL
+
+Issues a http GET request.`,
+	"put": `Usage: put URL
+
+Issues a http PUT request with the request headers and body in the
+view.`,
+	"delete": `Usage: delete URL
+
+Issues a http DELETE request.`,
+	"head": `Usage: head URL
+
+Issues a http HEAD request.`,
 }
 
 // helpMessagesOrder The order to display the help messages in since go
-// randomizes iteration order. Also, not alphabetical since 'help' is more
-// important among other things.
+// randomizes iteration order. Also, not alphabetical since some are more
+// important among others.
 var helpMessagesOrder []string = []string{
 	"help",
 	"exit",
@@ -356,35 +360,39 @@ var helpMessagesOrder []string = []string{
 	"header",
 	"history",
 	"env",
+	"!",
 	">",
 	">>",
-	"!",
+	"profiles",
+	"create",
+	"use",
+	"remove",
+	"rename",
 }
 
 // help Returns a string with help output. If a command is given in argv, the
 // corresponding help message for that command is given. If the command does
 // not exist, an error message is returned.
 func help(argv []string) string {
-	var command string
-
 	// Generic help
 	if len(argv) < 2 {
 		var output string
-		i := 0
-		for _, command = range helpMessagesOrder {
-			i++
+		for i, command := range helpMessagesOrder {
+			output += "--- " + command + " ---\n"
 			output += helpMessages[command]
-			output += "\n"
+			if i != len(helpMessages)-1 {
+				output += "\n---\n\n"
+			}
 		}
 		return output
 	}
-	command = argv[1]
+	command := argv[1]
 
 	// Specific command help
 	if message, found := helpMessages[command]; found {
 		return message
 	}
-	return "No such command: '" + argv[0] + "'"
+	return "No documentation for '" + argv[1] + "'"
 }
 
 // lookupShell Returns the shell for the user.
@@ -453,8 +461,8 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 	argv := strings.Split(rawCommand, " ")
 	command := argv[0]
 
-	switch {
-	case command == "!":
+	switch command {
+	case "!":
 		if len(argv) < 2 {
 			message := help([]string{"help", command})
 			updateResponseBodyView(rspBodyView, message)
@@ -465,16 +473,16 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		rspBodyView, _ := g.View(RSP_BODY_VIEW)
 		updateResponseBodyView(rspBodyView, message)
 
-	case command == "?": // Just in case people get confused
+	case "?": // Just in case people get confused
 		fallthrough
-	case command == "help":
+	case "help":
 		message := help(argv)
 		updateResponseBodyView(rspBodyView, message)
 
-	case command == ">":
+	case ">":
 		appendToFile = false
 		fallthrough
-	case command == ">>":
+	case ">>":
 		appendToFile = true
 		if len(argv) < 2 {
 			message := help([]string{"help", command})
@@ -483,7 +491,7 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		}
 		saveResponseToFile(rspBodyView.Buffer(), argv[1], appendToFile)
 
-	case command == "env":
+	case "env":
 		if len(argv) < 2 {
 			env := dumpEnvironment("")
 			updateResponseBodyView(rspBodyView, env)
@@ -497,7 +505,7 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		}
 		updateCommandLineView(cmdLineView, "")
 
-	case command == "create":
+	case "create":
 		if len(argv) < 2 {
 			message := help([]string{"help", command})
 			updateResponseBodyView(rspBodyView, message)
@@ -510,7 +518,7 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			updateResponseBodyView(rspBodyView, "Profile "+argv[1]+" has been created and is now active.")
 		}
 
-	case command == "use":
+	case "use":
 		if len(argv) < 2 {
 			message := help([]string{"help", command})
 			updateResponseBodyView(rspBodyView, message)
@@ -523,7 +531,7 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			updateResponseBodyView(rspBodyView, argv[1]+" is now the current profile.")
 		}
 
-	case command == "remove":
+	case "remove":
 		if len(argv) < 2 {
 			message := help([]string{"help", command})
 			updateResponseBodyView(rspBodyView, message)
@@ -541,7 +549,7 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		}
 		updateResponseBodyView(rspBodyView, tempComplete)
 
-	case command == "rename":
+	case "rename":
 		if len(argv) < 2 {
 			message := help([]string{"help", command})
 			updateResponseBodyView(rspBodyView, message)
@@ -555,7 +563,7 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			updateResponseBodyView(rspBodyView, argv[1]+" is now named "+argv[2])
 		}
 
-	case command == "profiles":
+	case "profiles":
 		if len(argv) < 2 {
 			message := help([]string{"help", command})
 			updateResponseBodyView(rspBodyView, message)
@@ -573,17 +581,18 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		}
 		updateResponseBodyView(rspBodyView, tempList)
 
-	case command == "history":
+	case "history":
 		enterHistoryView(g)
-	case command == "q":
+
+	case "q":
 		fallthrough
-	case command == "quit":
+	case "quit":
 		fallthrough
-	case command == "exit":
+	case "exit":
 		err = gocui.ErrQuit
 		return
 
-	case command == "header":
+	case "header":
 		if len(argv) < 2 {
 			message := help([]string{"help", command})
 			updateResponseBodyView(rspBodyView, message)
@@ -591,11 +600,11 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		}
 		appendHeaderToView(argv[1], rqtHeaderView)
 
-	case command == "get":
-	case command == "put":
-	case command == "post":
-	case command == "delete":
-	case command == "head":
+	case "get":
+	case "put":
+	case "post":
+	case "delete":
+	case "head":
 		// Assume is a call
 		if len(argv) < 2 {
 			updateResponseBodyView(rspBodyView, "Invalid Usage: <call-type> <url>")
