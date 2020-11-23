@@ -26,6 +26,10 @@ install:
 	else \
 	    echo 'export TCB_ARCH_DIR=\"$(realprefix)/lib/call-buddy\"' >> ~/.bashrc; \
 	fi
+	@mkdir -p $(realprefix)/share/man/man1/
+	@cp tcb.1 call-buddy.1 $(realprefix)/share/man/man1/
 
 uninstall:
 	@for d in $(SUBDIRS); do $(MAKE) -C $$d uninstall; done
+	@rm $(realprefix)/bin/tcb
+	@rm $(realprefix)/share/man/man1/tcb.1 $(realprefix)/share/man/man1/call-buddy.1

@@ -1,0 +1,30 @@
+.\" Manpage for tcb
+.\" Contact dylan.gardner@utah.edu to correct errors or typos.
+.TH tcb 1 2020-11-23 "v0.1.0" "Call-Buddy Manual"
+.SH NAME
+\fBtcb\fR \- remote call-buddy launcher using SSH
+.SH SYNOPSIS
+\fBtcb\fR [user@]host
+.SH DESCRIPTION
+\fBtcb\fR is a script for launching call-buddy into remote machines
+over SSH using precompiled architecture-specific call-buddy binaries
+installed at compile-time. This facilitates remote HTTP debugging
+and testing without proxies or remote daemons. Files created in the
+remote environment can be synced down if the \fBrsync\fR utility is
+installed on both endpoints. The launching OS environment is
+accessible via \fBcall-buddy\fR's 'Home' environment.
+
+Note that this script currently requires that the remote target has
+passwordless SSH set up and enabled to work.
+.SH OPTIONS
+There are no options for \fBtcb\fR.
+.SH ENVIRONMENT
+.IP TCB_ARCH_DIR
+The location of architecture-specific \fBcall-buddy\fR binaries. If
+this is not present, \fIprefix/lib/call-buddy\fR is attempted to be
+used where \fIprefix\fR corresponds to the prefix location of the
+\fBcall-buddy\fR binary found. e.g. \fI/usr/local/lib/call-buddy\fR
+.SH SEE ALSO
+call-buddy(1), ssh(1), rsync(1)
+.SH AUTHOR
+Written by Dylan Gardner

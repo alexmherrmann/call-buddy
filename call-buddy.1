@@ -1,0 +1,39 @@
+.\" Manpage for call-buddy
+.\" Contact dylan.gardner@utah.edu to correct errors or typos.
+.TH call-buddy 1 2020-11-23 "v0.1.0" "Call-Buddy Manual"
+.SH NAME
+\fBcall-buddy\fR \- interactive HTTP caller
+.SH SYNOPSIS
+\fBcall-buddy\fR [-e env-file]
+.SH DESCRIPTION
+\fBcall-buddy\fR is an interactive HTTP terminal application, often used
+to debug or test RESTful endpoints.
+
+The terminal user-interface takes in commands to issue HTTP calls,
+manipulate those responses or to modify \fBcall-buddy\fR's environment
+variables, profiles or windows. Response headers and bodies can be
+modified in window pane editors.
+
+The 'help' command inside \fBcall-buddy\fR should be used for internal
+documentation on commands and use.
+.SH OPTIONS
+.IP "\fB-e\fR \fIfile\fR"
+Environment file to load into the internal "Home" environment.
+.SH FILES
+.I ~/.call-buddy/state-*.json
+.RS
+State files corresponding to different profiles created. If
+\fI$XDG_HOME_DIR\fR is set, state files are stored in
+\fI$XDG_HOME_DIR/.call-buddy\fR. These files should only be modified
+using \fBcall-buddy\fR.
+.RE
+.SH ENVIRONMENT
+The environment in which call-buddy is invoked in is loaded into
+an internal 'Vars' environment. These variables can be accessed in
+the HTTP request headers and body using the '{{Vars.NAME}}' syntax.
+.SH SEE ALSO
+tcb(1), curl(1), wget(1)
+.SH BUGS
+Small terminal sizes may cause an ugly fatal crash.
+.SH AUTHOR
+Written by Dylan Gardner, Alex Herrmann, Cooper Pender, and Derek Dixon
