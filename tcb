@@ -47,6 +47,7 @@ die() {
 }
 find_arch_dir() {
     if [ -d "$TCB_ARCH_DIR" ]; then
+        echo "Using TCB_ARCH_DIR=$TCB_ARCH_DIR to find arch-specific binaries..." > /dev/stderr
         echo "$TCB_ARCH_DIR"
         return
     fi
@@ -76,7 +77,7 @@ if test $? -ne 0; then
 fi
 
 printf "Checking if SSH is passwordless... " > /dev/stderr
-if ! $(ssh -o PreferredAuthentications=publickey,hostbased "$target" /bin/true); then
+if ! ssh -o PreferredAuthentications=publickey -o PreferredAuthentications=hostbased "$target" /bin/true; then
     # We can't really allow password-based SSH since not only do we require
     # multiple invocations of SSH-based commands to sync and set up call-buddy
     # (which would require entering passwords many times), but syncing will
