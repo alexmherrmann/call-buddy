@@ -549,13 +549,13 @@ func bang(argv []string, input string) string {
 }
 
 func evalCmdLine(g *gocui.Gui) (err error) {
+	var ourErr error // Returning an error causes panic! wtf
 	var historicalCall t.HistoricalCall
 	var appendToFile bool
-	err = nil
 	// FIXME: Deal with errors!
 	cmdLineView, _ := g.View(CMD_LINE_VIEW)
 	rspBodyView, _ := g.View(RSP_BODY_VIEW)
-	rqtBodyView, err := g.View(RQT_BODY_VIEW)
+	rqtBodyView, _ := g.View(RQT_BODY_VIEW)
 	rqtHeaderView, _ := g.View(RQT_HEAD_VIEW)
 	requestBodyBuffer := rqtBodyView.Buffer()
 
@@ -564,7 +564,6 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 	if rawCommand == "" {
 		return
 	}
-
 	argv := strings.Split(rawCommand, " ")
 	command := argv[0]
 
@@ -620,9 +619,9 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			updateResponseBodyView(rspBodyView, message)
 			break
 		}
-		_, err := profiles.New(stateDir, argv[1])
-		if err != nil {
-			updateResponseBodyView(rspBodyView, err.Error())
+		_, ourErr := profiles.New(stateDir, argv[1])
+		if ourErr != nil {
+			updateResponseBodyView(rspBodyView, ourErr.Error())
 		} else {
 			updateResponseBodyView(rspBodyView, "Profile "+argv[1]+" has been created and is now active.")
 		}
@@ -633,9 +632,9 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			updateResponseBodyView(rspBodyView, message)
 			break
 		}
-		_, err := profiles.Use(argv[1])
-		if err != nil {
-			updateResponseBodyView(rspBodyView, err.Error())
+		_, ourErr := profiles.Use(argv[1])
+		if ourErr != nil {
+			updateResponseBodyView(rspBodyView, ourErr.Error())
 		} else {
 			updateResponseBodyView(rspBodyView, argv[1]+" is now the current profile.")
 		}
@@ -649,9 +648,9 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 
 		var tempComplete string
 		for _, selected := range argv[1:] {
-			err := profiles.Remove(stateDir, selected)
-			if err != nil {
-				tempComplete += "Failed to remove " + selected + ": " + err.Error() + "\n"
+			ourErr := profiles.Remove(stateDir, selected)
+			if ourErr != nil {
+				tempComplete += "Failed to remove " + selected + ": " + ourErr.Error() + "\n"
 			} else {
 				tempComplete += "Successfully Removed " + selected + "\n"
 			}
@@ -665,9 +664,9 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			break
 		}
 
-		err := profiles.Rename(argv[1], argv[2])
-		if err != nil {
-			updateResponseBodyView(rspBodyView, err.Error())
+		ourErr := profiles.Rename(argv[1], argv[2])
+		if ourErr != nil {
+			updateResponseBodyView(rspBodyView, ourErr.Error())
 		} else {
 			updateResponseBodyView(rspBodyView, argv[1]+" is now named "+argv[2])
 		}
@@ -720,9 +719,9 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 			break
 		}
 		url := argv[1]
-		if historicalCall, err = call(command, url, requestBodyBuffer); err != nil {
+		if historicalCall, ourErr = call(command, url, requestBodyBuffer, requestHeadersBuffer); ourErr != nil {
 			// Print error out in place of response body
-			updateResponseBodyView(rspBodyView, err.Error())
+			updateResponseBodyView(rspBodyView, ourErr.Error())
 			return
 		}
 		profiles.CurrentState().History.AddFinishedCall(historicalCall)
