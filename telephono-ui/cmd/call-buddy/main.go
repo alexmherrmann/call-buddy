@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -162,12 +163,38 @@ func appendHeaderToView(kv string, requestHeaderView *gocui.View) {
 
 	// We want to set a header
 	headers := getCurrentRequestTemplate(profiles.CurrentState()).Headers
-	headers[splatted[0]] = append(headers[splatted[0]], splatted[1])
-	updateRequestHeaderView(requestHeaderView, headers)
+	tmpHeaders := map[string][]string{}
+	for key, values := range headers {
+		tmpHeaders[key] = values
+	}
+	tmpHeaders[splatted[0]] = []string{splatted[1]}
+	updateRequestHeaderView(requestHeaderView, tmpHeaders)
+}
+
+func getHeadersFromView(headerBody string) (headers http.Header, errs []error) {
+	rawHeaders := strings.Split(headerBody, "\n")
+	if len(rawHeaders) == 0 {
+		return
+	}
+
+	headers = http.Header{}
+	for _, rawHeader := range rawHeaders {
+		var splatted []string
+		if strings.TrimSpace(rawHeader) == "" {
+			continue
+		}
+
+		if splatted = strings.SplitN(rawHeader, ": ", 2); len(splatted) != 2 {
+			errs = append(errs, errors.New("Could not split "+rawHeader))
+			continue
+		}
+		headers.Add(splatted[0], splatted[1])
+	}
+	return
 }
 
 // TODO AH: args should probably get broken out into real parameters
-func call(methodType, url, body string) (t.HistoricalCall, error) {
+func call(methodType, url, body, headerBody string) (t.HistoricalCall, error) {
 	methodType = strings.ToLower(methodType)
 	// TODO AH: Clean up documentation and other places
 	//contentType := "text/plain"
@@ -176,6 +203,18 @@ func call(methodType, url, body string) (t.HistoricalCall, error) {
 	theTemplate.Method = t.HttpMethod(strings.ToUpper(methodType))
 	theTemplate.Body = body
 	theTemplate.Url = url
+	headers, errs := getHeadersFromView(headerBody)
+	if len(errs) != 0 {
+		var combinedErr string
+		for i, err := range errs {
+			combinedErr += err.Error()
+			if i != len(errs)-1 {
+				combinedErr += "\n"
+			}
+		}
+		return t.HistoricalCall{}, errors.New(combinedErr)
+	}
+	theTemplate.Headers = headers
 	return theTemplate.Execute(http.DefaultClient, &profiles.CurrentState().Environment)
 }
 
@@ -556,6 +595,7 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 	rqtBodyView, _ := g.View(RQT_BODY_VIEW)
 	rqtHeaderView, _ := g.View(RQT_HEAD_VIEW)
 	requestBodyBuffer := rqtBodyView.Buffer()
+	requestHeadersBuffer := rqtHeaderView.Buffer()
 
 	// Extract the command into an args list
 	rawCommand := strings.TrimSpace(cmdLineView.Buffer())
