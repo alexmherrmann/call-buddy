@@ -565,7 +565,7 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		return
 	}
 	argv := strings.Split(rawCommand, " ")
-	command := argv[0]
+	command := strings.ToLower(argv[0])
 
 	switch command {
 	case "!":
@@ -672,7 +672,7 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		}
 
 	case "profiles":
-		if len(argv) < 2 {
+		if len(argv) >= 2 {
 			message := help([]string{"help", command})
 			updateResponseBodyView(rspBodyView, message)
 			break
@@ -709,9 +709,13 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 		appendHeaderToView(argv[1], rqtHeaderView)
 
 	case "get":
+		fallthrough
 	case "put":
+		fallthrough
 	case "post":
+		fallthrough
 	case "delete":
+		fallthrough
 	case "head":
 		// Assume is a call
 		if len(argv) < 2 {
