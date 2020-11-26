@@ -533,7 +533,6 @@ func bang(argv []string, input string) string {
 	shellArgv = append(shellArgv, argv[1:]...)
 
 	cmd := exec.Command(shellArgv[0], shellArgv[1:]...)
-	log.Printf("%s %v", shellArgv[0], shellArgv[1:])
 	cmd.Stdin = strings.NewReader(input)
 
 	// Grab out stderr and stdout
@@ -541,7 +540,6 @@ func bang(argv []string, input string) string {
 	//           but rather a byte stream so string(output) might cause
 	//           problems...
 	output, err := cmd.CombinedOutput()
-	log.Printf("output: %s\n", output)
 	if err != nil {
 		return err.Error()
 	}
@@ -764,7 +762,6 @@ func updateViewsWithCall(g *gocui.Gui, call t.HistoricalCall) {
 func setView(gui *gocui.Gui, name string, state ViewState) {
 	currView = state
 	currViewPtr, err := gui.SetCurrentView(name)
-	log.Print(err)
 	// FIXME Dylan: This should be done only if the editor is editable
 	currViewPtr.Editor = &theEditor
 	gui.SetViewOnTop(name)
@@ -774,7 +771,6 @@ func setView(gui *gocui.Gui, name string, state ViewState) {
 func switchNextView(g *gocui.Gui, v *gocui.View) error {
 	// FIXME: Properly handle errors
 	// Round robben switching between views
-	log.Print(currView)
 	switch currView {
 	case CMD_LINE:
 		// -> method body
@@ -887,7 +883,6 @@ func updateResponseBodyView(view *gocui.View, body string) {
 	view.Clear()
 	fmt.Fprint(view, "")
 	fmt.Fprint(view, body)
-	log.Printf("Buffer: %s", view.Buffer())
 }
 
 func updateHistoryView(view *gocui.View) {
