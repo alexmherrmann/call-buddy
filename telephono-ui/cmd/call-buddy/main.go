@@ -801,7 +801,7 @@ func updateViewsWithCall(g *gocui.Gui, call t.HistoricalCall) {
 
 func setView(gui *gocui.Gui, name string, state ViewState) {
 	currView = state
-	currViewPtr, err := gui.SetCurrentView(name)
+	currViewPtr, _ := gui.SetCurrentView(name)
 	// FIXME Dylan: This should be done only if the editor is editable
 	currViewPtr.Editor = &theEditor
 	gui.SetViewOnTop(name)

@@ -1,10 +1,8 @@
 package telephono
 
 import (
-	"io/ioutil"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -33,30 +31,19 @@ func (r *RequestTemplate) Execute(client *http.Client, env *CallBuddyEnvironment
 		return HistoricalCall{}, newCallErr
 	}
 
-	// This must be done before we do our call since the call consumes the body (since it's a reader)
-	// Populate our own structs with Go's http.Request
-	request := Request{}
-	request.Populate(httpRequest, expandedBody)
-
 	// Add the headers
 	header := http.Header{}
 	for key, values := range r.Headers {
 		for _, value := range values {
-			header[key] = append(header[key], env.Expand(value))
+			header.Add(key, env.Expand(value))
 		}
-	}
-
-	// If the user forgets to add the content-type, we'll be nice and add it for them!
-	if method == "POST" || method == "PUT" {
-		contentType := header.Get("Content-type")
-		if contentType == "" {
-			httpRequest.Header["Content-type"] = []string{"text/plain"}
-		}
-		contentLength := len(expandedBody)
-		httpRequest.Header["Content-length"] = []string{strconv.Itoa(contentLength)}
-		httpRequest.Body = ioutil.NopCloser(strings.NewReader(expandedBody))
 	}
 	httpRequest.Header = header
+
+	// This must be done before we do our call since the call consumes the body (since it's a reader)
+	// Populate our own structs with Go's http.Request
+	request := Request{}
+	request.Populate(httpRequest, expandedBody)
 
 	// Call!
 	httpResponse, doErr := client.Do(httpRequest)
