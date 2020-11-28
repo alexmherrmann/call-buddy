@@ -25,26 +25,51 @@ syncdown_blacklist_file="$(mktemp)"
 cat <<EOF > "$syncdown_blacklist_file"
 call-buddy
 state-*.json
+tui.log
 EOF
-echo "$syncdown_blacklist_file"
 
+# Returns the terminal call-buddy state directory
+find_state_dir() {
+    if [ "$XDG_HOME_DIR" != "" ]; then
+        echo "$XDG_HOME_DIR/.call-buddy"
+    fi
+    echo "$HOME/.call-buddy"
+}
+# Syncs state-*.json files up
+syncdown_state(){
+    state_dir="$(find_state_dir)"
+    rsync -av --delete --include='state-*.json' --exclude='*' "$target:$remote_tmp_dir/" "$state_dir/" >> sync.log 2>&1
+}
+# Syncs down new remote files to the current working directory
 syncdown() {
     echo "Syncing down the remote files..." > /dev/stderr
+
     while true; do
+        syncdown_state
+
         # Sync down
-        rsync -av --exclude-from="$syncdown_blacklist_file" "$target:$remote_tmp_dir/" "$(pwd)" >> sync.log
+        rsync -av --exclude-from="$syncdown_blacklist_file" "$target:$remote_tmp_dir/" . >> sync.log 2>&1
         if test $? -ne 0; then
             echo "Failed to sync using rsync... continuing without rsync" | tee -a sync.log > /dev/stderr
             return
         fi
+
         sleep "$sync_interval"
     done
 }
-# Syncs state.json up
+# Syncs state-*.json files up
+syncup_state(){
+    state_dir="$(find_state_dir)"
+    rsync -av "$state_dir"/state-*.json "$target:$remote_tmp_dir/" >> sync.log 2>&1
+}
+# Syncs the given files up
 syncup() {
-    echo "Syncing up the state and files..." > /dev/stderr
-    # FIXME: Deal with ~/.call-buddy
-    rsync -av "$@" "$target:$remote_tmp_dir/" >> sync.log
+    syncup_state
+
+    if [ -z "$1" ]; then
+        echo "Syncing up user-specified files..." > /dev/stderr
+        rsync -av "$@" "$target:$remote_tmp_dir/" >> sync.log 2>&1
+    fi
 }
 die() {
     echo "$@" > /dev/stderr
