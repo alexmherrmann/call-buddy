@@ -63,7 +63,12 @@ find_arch_dir() {
         echo "$maybe_tcb_arch_dir"
         return
     fi
-    die "\$TCB_ARCH_DIR does not exist nor does lib/call-buddy/ exist in 'call-buddy' prefix: $call_buddy_prefix"
+
+    if [ ! -f "$call_buddy_path" ]; then
+        die "\$TCB_ARCH_DIR (prefix/lib/call-buddy/) is not set and call-buddy could not be found in \$PATH"
+    else
+        die "\$TCB_ARCH_DIR (prefix/lib/call-buddy/) is not set and prefix of call-buddy ($call_buddy_prefix) does not contain lib/call-buddy/"
+    fi
 }
 
 if [ "$1" = "" ]; then
