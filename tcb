@@ -19,12 +19,18 @@
 # Usage: ./tcb [USER@HOST] file...
 sync_interval=3
 remote_tmp_dir="~/.call-buddy"
+syncdown_blacklist_file="$(mktemp)"
+cat <<EOF > "$syncdown_blacklist_file"
+call-buddy
+state-*.json
+EOF
+echo "$syncdown_blacklist_file"
 
 syncdown() {
     echo "Syncing down the remote files..." > /dev/stderr
     while true; do
         # Sync down
-        rsync -av --exclude "call-buddy" "$target:$remote_tmp_dir/" "$(pwd)" >> sync.log
+        rsync -av --exclude-from="$syncdown_blacklist_file" "$target:$remote_tmp_dir/" "$(pwd)" >> sync.log
         if test $? -ne 0; then
             echo "Failed to sync using rsync... continuing without rsync" > /dev/stderr
             return
@@ -35,11 +41,8 @@ syncdown() {
 # Syncs state.json up
 syncup() {
     echo "Syncing up the state and files..." > /dev/stderr
-    if [ -f "state.json" ]; then
-        rsync -av "state.json" "$@" "$target:$remote_tmp_dir/" >> sync.log
-    else
-        rsync -av "$@" "$target:$remote_tmp_dir/" >> sync.log
-    fi
+    # FIXME: Deal with ~/.call-buddy
+    rsync -av "$@" "$target:$remote_tmp_dir/" >> sync.log
 }
 die() {
     echo "$@" > /dev/stderr
@@ -115,16 +118,18 @@ fi
 
 # We want our local environment available in the remote environment, use the
 # -e flag in call-buddy
-local_env_file="$(hostname).env"
+local_env_file="$(mktemp -d)/$(hostname).env"
 env > "$local_env_file"
+echo "$(basename "$local_env_file")" >> "$syncdown_blacklist_file"
 
 shift
+for syncup_file in "$@"; do
+    echo "$(basename "$syncup_file")" >> "$syncdown_blacklist_file"
+done
 syncup "$@" "$local_env_file"
 syncdown &
 
-# Remote that pesky local environment file
-trap 'trap - TERM && rm $local_env_file' INT TERM EXIT
-# Kill all child processes (e.g. syncing)
-trap 'trap - TERM && rm '"$local_env_file"'; kill -- -$$' INT TERM EXIT
+# Remote that pesky local environment file and kill all child processes (e.g. syncing)
+trap 'trap - TERM && rm '"$local_env_file"'; rm '"$syncdown_blacklist_file"'; kill -- -$$' INT TERM EXIT
 
 ssh -t "$target" "cd $remote_tmp_dir && ./call-buddy -e \"$local_env_file\"; echo 'Removing remote files at $remote_tmp_dir'; rm -r $remote_tmp_dir"
