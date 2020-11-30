@@ -1,23 +1,34 @@
 .\" Manpage for tcb
-.\" Contact dylan.gardner@utah.edu to correct errors or typos.
 .TH tcb 1 2020-11-23 "v0.1.0" "Call-Buddy Manual"
 .SH NAME
 \fBtcb\fR \- remote call-buddy launcher using SSH
 .SH SYNOPSIS
-\fBtcb\fR [user@]host
+\fBtcb\fR [user@]host [file ...]
 .SH DESCRIPTION
 \fBtcb\fR is a script for launching call-buddy into remote machines
 over SSH using precompiled architecture-specific call-buddy binaries
 installed at compile-time. This facilitates remote HTTP debugging
 and testing without proxies or remote daemons. Files created in the
-remote environment can be synced down if the \fBrsync\fR utility is
-installed on both endpoints. The launching OS environment is
-accessible via \fBcall-buddy\fR's 'Home' environment.
+remote environment can be synced down to the current directory if
+the \fBrsync\fR utility is installed on both endpoints. The state of
+the program (call history, environment) is also synced with the
+launching machine if \fBrsync\fR is installed. The launching OS
+environment is accessible via \fBcall-buddy\fR's \'Home\'
+environment.
 
 Note that this script currently requires that the remote target has
 passwordless SSH set up and enabled to work.
 .SH OPTIONS
 There are no options for \fBtcb\fR.
+.SH FILES
+.I ~/.call-buddy/state-*.json
+.RS
+State files corresponding to different profiles created that will
+be synced to and from the remote environment if rsync is installed.
+If \fI$XDG_HOME_DIR\fR is set, state files are stored in
+\fI$XDG_HOME_DIR/.call-buddy\fR. These files should only be modified
+using \fBcall-buddy\fR.
+.RE
 .SH ENVIRONMENT
 .IP TCB_ARCH_DIR
 The location of architecture-specific \fBcall-buddy\fR binaries. If
@@ -26,5 +37,11 @@ used where \fIprefix\fR corresponds to the prefix location of the
 \fBcall-buddy\fR binary found. e.g. \fI/usr/local/lib/call-buddy\fR
 .SH SEE ALSO
 call-buddy(1), ssh(1), rsync(1)
+.SH BUGS
+Files launched into the remote environment will implicitly be
+synced down to the current directory, regardless of whether they are
+updated in the remote environment as a side effect of the syncing
+functionality.
 .SH AUTHOR
-Written by Dylan Gardner
+Written by Dylan Gardner as part of the Terminal Call-Buddy team at
+the University of Utah.
