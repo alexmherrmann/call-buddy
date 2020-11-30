@@ -35,3 +35,15 @@ uninstall:
 	@for d in $(SUBDIRS); do $(MAKE) -C $$d uninstall; done
 	@rm $(PREFIX)/bin/tcb
 	@rm $(PREFIX)/share/man/man1/tcb.1 $(PREFIX)/share/man/man1/call-buddy.1
+
+.PHONY: major-release
+major-release:
+	./release.sh major
+
+.PHONY: minor-release
+minor-release:
+	./release.sh minor
+
+.PHONY: patch-release
+patch-release:
+	./release.sh patch
