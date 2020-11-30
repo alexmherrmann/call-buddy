@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the given $1 target based on ${@:2} for architectures in arch.txt.
 basedir=`dirname "$0"`
-target="$1"
+target="$(basename $1)"
 shift
 cat "$basedir/arch.txt" \
     | grep -v '^#' \

@@ -32,7 +32,7 @@ wget "https://github.com/call-buddy/call-buddy/archive/v$VERSION.tar.gz"
 tar -xzf "call-buddy-$VERSION.tar.gz"
 cd "call-buddy-$VERSION"
 make
-make install prefix="$PREFIX"
+make install PREFIX="$PREFIX"
 ```
 
 ## Uninstallation
@@ -41,7 +41,7 @@ make install prefix="$PREFIX"
 PREFIX=/usr/local
 VERSION=0.1.0
 cd "$PREFIX/src/call-buddy-$VERSION/"
-make uninstall prefix="$PREFIX"
+make uninstall PREFIX="$PREFIX"
 ```
 
 ## Launching cross-compiled binaries
