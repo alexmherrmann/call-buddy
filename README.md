@@ -6,7 +6,7 @@
 
 ## What does it do?
 
-- Can make and debug templated (think Postman) HTTP calls with little fuss. 
+- Can make and debug templated (think Postman) HTTP calls with little fuss.
 
 - Store call templates and variables, consistent with multiple remote and local invocations.
 
@@ -15,6 +15,10 @@
 - Out-of-the-box knowledge of bastion servers, Kubernetes/Docker networks. Helpful when dealing with internal services like Elasticsearch, CouchDB, or any HTTP service.
 
 - Has a fun TUI that runs wherever you have a TTY with light resource usage.
+
+## Screenshot?
+
+![Screenshot of a HTTP GET request in call-buddy](resources/screenshot-get-utah.png)
 
 ## Complilation
 
@@ -142,6 +146,6 @@ BUGS
 AUTHOR
        Written by Dylan Gardner as part of the Terminal Call-Buddy team at the
        University of Utah.
-      
+
 v0.1.0                            2020-11-23                            tcb(1)
 ```
