@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -144,6 +145,15 @@ func saveResponseToFile(contents, filepath string, appendToFile bool) (err error
 	}
 	defer fd.Close()
 	fd.WriteString(contents)
+	return
+}
+
+func loadResponseFromFile(requestBodyView *gocui.View, filepath string) (err error) {
+	response, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return
+	}
+	updateRequestBodyView(requestBodyView, string(response))
 	return
 }
 
@@ -362,6 +372,7 @@ COMMANDS
 - env [N][K=V]  Outputs one or more named envs or stores a key
 - ! SHELL       Executes the shell command and outputs it
 - > FILE        (Over)writes the output to a file
+- < FILE        (Over)writes the response body with a file
 - >> FILE       Appends the output to a file
 - profiles      Outputs the available profiles
 - create NAME   Creates a new profile
@@ -394,6 +405,7 @@ var helpSynopsises map[string]string = map[string]string{
 	"exit":     "exit",
 	"!":        "! SHELL-COMMAND",
 	">":        "> FILE",
+	"<":        "< FILE",
 	">>":       ">> FILE",
 	"env":      "env [KEY=VALUE]\nenv [NAME]",
 	"header":   "header KEY=VALUE",
@@ -453,6 +465,8 @@ Assuming a UNIX system.
 Saves the call response to the given file (and overrides the contents).`,
 	">>": `
 Saves and appends the call response to the given file.`,
+	"<": `
+Loads the given file into the call response (and overrides the contents).`,
 	"env": `
 Displays the environment or stores the given key value pair in the
 'User' environment. Use {{User.KEY}} to extract the value.`,
@@ -515,6 +529,7 @@ var helpMessagesOrder []string = []string{
 	"!",
 	">",
 	">>",
+	"<",
 	"profiles",
 	"create",
 	"use",
@@ -629,6 +644,14 @@ func evalCmdLine(g *gocui.Gui) (err error) {
 	case "help":
 		message := help(argv)
 		updateResponseBodyView(rspBodyView, message)
+
+	case "<":
+		if len(argv) < 2 {
+			message := help([]string{"help", command})
+			updateResponseBodyView(rspBodyView, message)
+			break
+		}
+		loadResponseFromFile(rqtBodyView, argv[1])
 
 	case ">":
 		appendToFile = false
