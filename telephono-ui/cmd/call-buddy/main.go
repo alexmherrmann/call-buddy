@@ -292,14 +292,14 @@ HTTP calls. The 'header KEY=VALUE' command can be used to add
 headers in addition to modifying the request header section.
 HTTP calls are saved to a history viewable with the the 'history'
 command. OS environment variables are accessible via the
-{{Vars.NAME}} syntax in the header and body views and viewable
+{{Var.NAME}} syntax in the header and body views and viewable
 using the 'env' command. User-defined variables are displayed and
 accessed using the User name via the 'env' command.
 
 ENVIRONMENT
 
 There are three environments within call-buddy. They are called
-'Vars', 'Home' and 'User'. The first is pulled from the OS
+'Var', 'Home' and 'User'. The first is pulled from the OS
 environment call-buddy is running in. The second is usually empty
 unless the -e flag is used; it contains an environment pulled from a
 file. When using the 'tcb' utility, this is used to store the
@@ -308,7 +308,7 @@ user accessible environment variables.
 
 These variables can be accessed within the request header and
 request body using the {{ENV.KEY}} syntax. For example, if
-APIKEY is stored in the OS environment, putting {{Vars.APIKEY}} in
+APIKEY is stored in the OS environment, putting {{Var.APIKEY}} in
 the request header or request body will result in this being
 expanded and sent in each HTTP request.
 

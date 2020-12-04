@@ -86,8 +86,8 @@ FILES
 
 ENVIRONMENT
        The  environment  in  which  call-buddy is invoked in is loaded into an
-       internal 'Vars' environment. These variables can  be  accessed  in  the
-       HTTP request headers and body using the '{{Vars.NAME}}' syntax.
+       internal 'Var' environment. These variables can  be  accessed  in  the
+       HTTP request headers and body using the '{{Var.NAME}}' syntax.
 
 SEE ALSO
        tcb(1), curl(1), wget(1)
