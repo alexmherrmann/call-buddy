@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -578,11 +579,15 @@ func bang(argv []string, input string) string {
 	// FIXME DG: We shouldn't trust stdout/stderr to be a valid string,
 	//           but rather a byte stream so string(output) might cause
 	//           problems...
-	output, err := cmd.CombinedOutput()
+	var outputBuf bytes.Buffer
+	cmd.Stdout = &outputBuf
+	cmd.Stderr = &outputBuf
+	err := cmd.Run()
+
 	if err != nil {
-		return err.Error()
+		return outputBuf.String() + "\n" + err.Error()
 	}
-	return string(output)
+	return outputBuf.String()
 }
 
 func evalCmdLine(g *gocui.Gui) (err error) {
